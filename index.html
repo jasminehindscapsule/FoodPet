@@ -40,9 +40,10 @@
   <section id="view-pet" class="view">
     <div class="pet-shell">
       <div class="pet-screen">
-        <canvas id="pet-canvas" width="256" height="320" aria-label="Your FoodPet"></canvas>
+        <canvas id="pet-canvas" aria-label="Your FoodPet"></canvas>
       </div>
       <p id="pet-mood" class="pet-mood">Waking up…</p>
+      <p id="pet-note" class="pet-note" hidden></p>
       <div class="xp-wrap" title="Progress to next level">
         <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
         <span class="xp-label" id="xp-label"></span>
@@ -112,6 +113,14 @@
         <span class="legend-dot future"></span> to come
       </p>
     </div>
+    <div class="card" id="fuel-card">
+      <div class="fuel-head">
+        <h3 class="h3">Your fuel</h3>
+        <button class="linkbtn" id="btn-profile">Edit profile</button>
+      </div>
+      <div id="fuel-body"></div>
+    </div>
+
     <div class="card">
       <h3 class="h3">Perfect days</h3>
       <p class="muted small">All six logged in a day earns a +20 bonus.</p>
@@ -126,6 +135,16 @@
   <button class="tab" data-view="shop"><span>🎩</span>Closet</button>
   <button class="tab" data-view="week"><span>📅</span>Week</button>
 </nav>
+
+<div id="sheet-wrap" class="sheet-wrap" hidden>
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-grip"></div>
+    <h2 class="sheet-title" id="sheet-title"></h2>
+    <p class="sheet-sub" id="sheet-sub"></p>
+    <div id="sheet-body"></div>
+  </div>
+</div>
 
 <script src="recipes.js"></script>
 <script src="app.js"></script>

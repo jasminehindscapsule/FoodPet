@@ -68,7 +68,7 @@ main{max-width:520px;margin:0 auto}
   padding:10px;display:flex;justify-content:center;
 }
 @media (prefers-color-scheme: dark){ .pet-screen{background:linear-gradient(180deg,#36405c,#2e3550)} }
-#pet-canvas{width:200px;height:250px;image-rendering:pixelated}
+#pet-canvas{width:100%;max-width:224px;height:auto;image-rendering:pixelated}
 .pet-mood{margin:12px 0 6px;font-weight:700}
 .xp-wrap{display:flex;align-items:center;gap:8px}
 .xp-bar{flex:1;height:10px;border-radius:99px;background:var(--line);overflow:hidden}
@@ -193,3 +193,80 @@ main{max-width:520px;margin:0 auto}
 }
 @keyframes rise{to{transform:translate(-50%,-70px);opacity:0}}
 .wk-row.pre{opacity:.4}
+
+/* ---------- pet note ---------- */
+.pet-note{
+  margin:2px 0 10px;font-size:13px;line-height:1.4;color:var(--ink-soft);
+  background:var(--bg);border-radius:14px;padding:9px 12px;animation:fade .3s ease;
+}
+.pet-note[hidden]{display:none}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+
+/* ---------- bottom sheet ---------- */
+.sheet-wrap{position:fixed;inset:0;z-index:30;display:flex;align-items:flex-end;justify-content:center}
+.sheet-wrap[hidden]{display:none}
+.sheet-backdrop{position:absolute;inset:0;background:rgba(60,48,80,.38);backdrop-filter:blur(2px)}
+.sheet{
+  position:relative;width:100%;max-width:520px;
+  background:var(--card);border-radius:28px 28px 0 0;
+  padding:10px 18px calc(22px + env(safe-area-inset-bottom));
+  box-shadow:0 -10px 30px rgba(90,70,130,.22);
+  max-height:88vh;overflow-y:auto;animation:rise-sheet .28s ease;
+}
+@keyframes rise-sheet{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.sheet-grip{width:42px;height:5px;border-radius:99px;background:var(--line);margin:0 auto 12px}
+.sheet-title{margin:0 0 4px;font-size:19px}
+.sheet-sub{margin:0 0 14px;font-size:14px;color:var(--ink-soft)}
+.sheet-note{font-size:13px;color:var(--ink-soft);margin:12px 0 14px;min-height:18px}
+.sheet-range{
+  margin:0 0 14px;font-size:13px;color:var(--ink-soft);
+  background:var(--bg);border-radius:12px;padding:8px 12px;text-align:center;
+}
+.sheet-range strong{color:var(--ink);white-space:nowrap}
+.sheet-row{display:flex;gap:8px;margin:12px 0 4px}
+.sheet-row .btn{width:auto;flex:0 0 auto;padding-inline:20px}
+
+/* ---------- portion buttons ---------- */
+.portion-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.portion{
+  font:inherit;color:var(--ink);cursor:pointer;text-align:center;
+  background:var(--card);border:1px solid var(--line);border-radius:18px;
+  padding:12px 6px;box-shadow:var(--shadow);transition:transform .08s ease;
+}
+.portion:active{transform:translateY(2px)}
+.portion-label{display:block;font-weight:800;font-size:14px}
+.portion-kcal{display:block;font-weight:800;color:var(--accent-deep);font-size:15px;margin:2px 0}
+.portion-sub{display:block;font-size:11px;color:var(--ink-soft);line-height:1.3}
+
+/* ---------- form fields ---------- */
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fieldwrap{display:block;margin-bottom:10px}
+.fieldwrap span{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:4px}
+.field{
+  width:100%;font:inherit;font-size:16px;color:var(--ink);
+  background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:11px 12px;
+}
+.field:focus{outline:2px solid var(--accent);outline-offset:1px}
+.linkbtn{
+  background:none;border:none;font:inherit;font-size:13px;font-weight:700;
+  color:var(--accent-deep);cursor:pointer;padding:6px 0;
+}
+.linkbtn.wide{display:block;width:100%;text-align:center;margin-top:10px}
+.btn.compact{width:auto;padding:11px 18px}
+
+/* ---------- meal fuel line ---------- */
+.meal-fuel{margin:-2px 0 8px;font-size:12px;font-weight:700;color:var(--ink-soft)}
+.meal-fuel.logged-fuel{color:#2f5a49}
+@media (prefers-color-scheme: dark){ .meal-fuel.logged-fuel{color:var(--mint)} }
+
+/* ---------- fuel card ---------- */
+.fuel-head{display:flex;justify-content:space-between;align-items:center}
+.fuel-head .h3{margin:0}
+.fuel-top{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.fuel-top>div{text-align:center;background:var(--bg);border-radius:14px;padding:10px 4px}
+.fuel-num{display:block;font-size:22px;font-weight:800}
+.fuel-lbl{font-size:11px;color:var(--ink-soft)}
+.fuel-basis{margin-top:10px;font-variant-numeric:tabular-nums}
+.slot-targets{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.slot-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}
+.slot-range{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}

@@ -3,6 +3,9 @@
 A gentle Tamagotchi-style companion that reminds you to eat on schedule and rewards
 you for logging meals. No account, no backend — everything lives in `localStorage`.
 
+The pet is drawn pixel by pixel on a canvas from a 16x16 character grid in `app.js` —
+edit `SPRITE` to reshape it.
+
 ## Run it
 
 Open `index.html` in a browser. That's it.
@@ -61,6 +64,49 @@ Each day the app picks one idea per slot, skipping anything used in that slot's 
 picks, so nothing repeats inside a week. The pick is deterministic per day, so reloading
 doesn't reshuffle it — but *Not feeling it — swap idea* on the Meals tab will.
 
+## Calorie adequacy
+
+Optional, and asked for once on first launch: age, weight, height, sex, activity level
+(default *lightly active*, 1.4). From that:
+
+- **BMR** — Mifflin-St Jeor: `10 x weight + 6.25 x height - 5 x age`, then `-161` female,
+  `+5` male, `-78` if you'd rather not say (midway between, rather than a guess).
+- **TDEE** — BMR x activity factor.
+- **Per-slot targets** — TDEE split 20 / 10 / 25 / 10 / 15 / 20 across the six slots,
+  each shown as a **range of +/-15%** rather than a number, so there is nothing to hit exactly.
+
+A 60kg, 173cm, 24-year-old woman, lightly active, comes out at 1960 kcal: breakfast
+335-450, mid-morning 165-225, lunch 415-565, pre-workout 165-225, post-workout 250-340,
+dinner 335-450.
+
+Targets are derived from the profile alone, so they change **only** when you edit it
+(Week tab -> Edit profile). Nothing recalculates day to day.
+
+### Logging an estimate
+
+Tapping *I ate this* asks how much it was: **Small / Just right / Big** (0.7x, 1x and
+1.35x of that recipe's `kcal` estimate, with the resulting number shown on the button),
+a box to type a figure if you know it, or *Just log it* for no estimate at all.
+
+Then, in a line under the pet:
+
+| | |
+|---|---|
+| In range | "Right in range. Nicely fuelled." Pet eats happily. |
+| Below | "That might not be much fuel — a little more protein or fat would round it out." Pet looks briefly low-energy — still hungry, never sad. |
+| Above | "A bit more than usual for this slot — no problem at all, just noting it." Pet looks pleasantly full. |
+
+**Points are identical in all three cases.** Portion size is information, never a score,
+and there is no red state, no deficit counter and no bar to fill.
+
+The Week tab shows your daily target against your average logged intake. That average
+counts only days where you estimated at least one meal — a day you didn't log isn't a
+day you didn't eat, so it shouldn't drag the number down. Partly logged days still read
+low, and the card says so.
+
+Estimates are deliberately rough: no barcodes, no food database. The point is noticing
+patterns, not precision.
+
 ## Points
 
 - **+10** per meal logged
@@ -68,6 +114,7 @@ doesn't reshuffle it — but *Not feeling it — swap idea* on the Meals tab wil
 - **Level** = every 100 points
 - **Streak** = consecutive days with at least one meal logged
 - Points buy palette swaps and hats in the Closet. Wearing costs nothing once unlocked.
+- Calorie estimates never change points, in either direction.
 
 ## No failure states
 
@@ -81,7 +128,7 @@ before you installed the app aren't counted against you in the weekly view.
 index.html               shell + views
 styles.css               pastel theme, light and dark
 app.js                   schedule, rotation, points, canvas pet, notifications
-recipes.js               the recipe database
+recipes.js               the recipe database, each with a rough `kcal` per serving
 sw.js                    offline cache + notification clicks
 manifest.webmanifest     PWA metadata
 icons/                   generated pixel-pet PNGs

@@ -21,6 +21,25 @@ const NO_REPEAT_DAYS = 6;      // a slot won't repeat an idea within this many p
 const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
 const NOTIFY_GRACE_MIN = 15;   // fire a reminder only within this long after the time
 
+/* ---------------- fuel: targets and portions ---------------- */
+// How the day's energy is split across the six slots.
+const SLOT_SHARE = {
+  breakfast: 0.20, midmorning: 0.10, lunch: 0.25,
+  preworkout: 0.10, postworkout: 0.15, dinner: 0.20,
+};
+const RANGE_SPREAD = 0.15;     // targets are shown as mid +/- 15%, never a single number
+const ACTIVITY = [
+  { id:'sedentary', label:'Sedentary',         factor:1.2,   hint:'mostly sitting, little planned movement' },
+  { id:'light',     label:'Lightly active',    factor:1.4,   hint:'daily home weight training' },
+  { id:'moderate',  label:'Moderately active', factor:1.55,  hint:'training most days, on your feet' },
+  { id:'very',      label:'Very active',       factor:1.725, hint:'hard training daily, or a physical job' },
+];
+const PORTIONS = [
+  { id:'small', label:'Small',      sub:'lighter than usual', mult:0.70 },
+  { id:'right', label:'Just right', sub:'the usual serving',  mult:1.00 },
+  { id:'big',   label:'Big',        sub:'a generous plate',   mult:1.35 },
+];
+
 /* ---------------- cosmetics ---------------- */
 const PALETTES = [
   { id:'mint',   name:'Mint',      cost:0,   body:'#bfe3d4', dark:'#7fb69f', cheek:'#f4b6b6' },
@@ -44,10 +63,11 @@ const HATS = [
 /* ---------------- storage ---------------- */
 const KEY = 'foodpet.v1';
 const blank = () => ({
+  profile: null,      // { age, weight, height, sex, activity } — set once, edited on request
   points: 0,
   streak: 0,
   lastStreakDay: null,
-  history: {},        // 'YYYY-MM-DD' -> { slotId: isoTimestamp }
+  history: {},        // 'YYYY-MM-DD' -> { slotId: { t: isoTimestamp, kcal: number|null } }
   picks: {},          // 'YYYY-MM-DD' -> { slotId: recipeId }
   recent: {},         // slotId -> [recipeId, …] most recent first
   perfectDays: [],    // ['YYYY-MM-DD', …]
@@ -130,8 +150,53 @@ function recipeFor(slotId, dateKey = today()){
   return RECIPES[slotId].find(r => r.id === id) || RECIPES[slotId][0];
 }
 
+/* ---------------- fuel maths ---------------- */
+// Mifflin-St Jeor. For 'unspecified' we sit between the two constants rather than
+// guessing, so the number stays a reasonable estimate either way.
+function bmrOf(p){
+  const base = 10*p.weight + 6.25*p.height - 5*p.age;
+  const offset = p.sex === 'female' ? -161 : p.sex === 'male' ? 5 : -78;
+  return Math.round(base + offset);
+}
+function activityOf(p){ return ACTIVITY.find(a => a.id === p.activity) || ACTIVITY[1]; }
+function tdee(){ return S.profile ? Math.round(bmrOf(S.profile) * activityOf(S.profile).factor) : null; }
+
+const to5 = n => Math.round(n/5)*5;
+// Targets change only when the profile changes — never recalculated day to day.
+function slotTarget(slotId){
+  const t = tdee();
+  if (!t) return null;
+  const mid = t * SLOT_SHARE[slotId];
+  return { mid: to5(mid), min: to5(mid * (1 - RANGE_SPREAD)), max: to5(mid * (1 + RANGE_SPREAD)) };
+}
+function verdict(slotId, kcal){
+  const target = slotTarget(slotId);
+  if (!target || kcal == null) return null;
+  if (kcal < target.min) return 'low';
+  if (kcal > target.max) return 'high';
+  return 'in';
+}
+// Deliberately warm and non-judgemental: awareness, never restriction.
+function verdictNote(slotId, kcal){
+  const meal = MEALS.find(m => m.id === slotId);
+  switch (verdict(slotId, kcal)){
+    case 'in':   return { icon:'\u2713', text:`Right in range for ${meal.name}. Nicely fuelled.` };
+    case 'low':  return { icon:'\u25CB', text:`That might not be much fuel for ${meal.name} — a little more protein or fat would round it out.` };
+    case 'high': return { icon:'\u25CF', text:`A bit more than usual for ${meal.name} — no problem at all, just noting it.` };
+    default:     return null;
+  }
+}
+
 /* ---------------- meal state ---------------- */
 // 'logged' | 'now' (its time has come, still waiting) | 'past' (gently skipped) | 'later'
+// Entries used to be a bare timestamp string; normalise either shape.
+function entryOf(v){ return (v == null || typeof v === 'object') ? v : { t:v, kcal:null }; }
+function logOf(dateKey){ return S.history[dateKey] || {}; }
+function kcalOf(dateKey, slotId){ const e = entryOf(logOf(dateKey)[slotId]); return e ? e.kcal : null; }
+function dayKcal(dateKey){
+  return MEALS.reduce((sum, m) => sum + (kcalOf(dateKey, m.id) || 0), 0);
+}
+
 function mealState(meal, now = new Date()){
   const log = S.history[today()] || {};
   if (log[meal.id]) return 'logged';
@@ -154,11 +219,13 @@ function currentMeal(now = new Date()){
 }
 
 /* ---------------- logging ---------------- */
-function logMeal(slotId){
+function logMeal(slotId, kcal = null){
   const key = today();
   S.history[key] = S.history[key] || {};
   if (S.history[key][slotId]) return;
-  S.history[key][slotId] = new Date().toISOString();
+  S.history[key][slotId] = { t: new Date().toISOString(), kcal };
+
+  // Full points either way. Portion size is information, never a score.
   S.points += POINTS_PER_MEAL;
   floatPoints('+' + POINTS_PER_MEAL);
 
@@ -179,7 +246,152 @@ function logMeal(slotId){
   }
   save();
   pet.eat();
+
+  // A short, gentle reaction to how much fuel that was.
+  const note = verdictNote(slotId, kcal);
+  if (note){
+    showNote(note);
+    const v = verdict(slotId, kcal);
+    if (v === 'low')  pet.tempMood('tired', 6000);   // "still hungry", never sad
+    if (v === 'high') pet.tempMood('happy', 6000);   // pleasantly full
+  } else {
+    hideNote();                                      // don't leave the last meal's note up
+  }
   renderAll();
+}
+
+// The estimate sheet: tap a portion, or type a number if you know it.
+function startLog(slotId){
+  unlockAudio();
+  if (!S.profile){ logMeal(slotId); return; }   // no profile, no targets — just log it
+
+  const meal = MEALS.find(m => m.id === slotId);
+  const recipe = recipeFor(slotId);
+  const target = slotTarget(slotId);
+
+  openSheet(`How much was that?`, `${meal.name} — ${recipe.name}`, body => {
+    const range = document.createElement('p');
+    range.className = 'sheet-range';
+    range.innerHTML = `Usual range for this slot <strong>${target.min}–${target.max} kcal</strong>`;
+    body.appendChild(range);
+
+    const grid = document.createElement('div');
+    grid.className = 'portion-grid';
+    for (const p of PORTIONS){
+      const kcal = to5(recipe.kcal * p.mult);
+      const b = document.createElement('button');
+      b.className = 'portion';
+      b.innerHTML = `<span class="portion-label">${p.label}</span>
+        <span class="portion-kcal">~${kcal}</span>
+        <span class="portion-sub">${p.sub}</span>`;
+      b.onclick = () => { closeSheet(); logMeal(slotId, kcal); };
+      grid.appendChild(b);
+    }
+    body.appendChild(grid);
+
+    const row = document.createElement('div');
+    row.className = 'sheet-row';
+    row.innerHTML = `<input id="kcal-input" class="field" type="number" inputmode="numeric"
+      min="0" max="3000" placeholder="or type kcal">`;
+    const go = document.createElement('button');
+    go.className = 'btn primary compact';
+    go.textContent = 'Log';
+    go.onclick = () => {
+      const v = parseInt(document.getElementById('kcal-input').value, 10);
+      closeSheet();
+      logMeal(slotId, Number.isFinite(v) && v > 0 ? v : null);
+    };
+    row.appendChild(go);
+    body.appendChild(row);
+
+    const skip = document.createElement('button');
+    skip.className = 'linkbtn wide';
+    skip.textContent = 'Just log it — no estimate';
+    skip.onclick = () => { closeSheet(); logMeal(slotId, null); };
+    body.appendChild(skip);
+  });
+}
+
+/* ---------------- the sheet ---------------- */
+function openSheet(title, sub, build){
+  document.getElementById('sheet-title').textContent = title;
+  document.getElementById('sheet-sub').textContent = sub || '';
+  const body = document.getElementById('sheet-body');
+  body.innerHTML = '';
+  build(body);
+  document.getElementById('sheet-wrap').hidden = false;
+}
+function closeSheet(){ document.getElementById('sheet-wrap').hidden = true; }
+
+// Profile setup — asked once on first launch, and whenever you tap Edit profile.
+function openProfileSheet(firstRun){
+  const p = S.profile || { age:'', weight:'', height:'', sex:'female', activity:'light' };
+  openSheet(
+    firstRun ? 'Hello! A few numbers first' : 'Your profile',
+    firstRun
+      ? 'This sets a rough daily energy target so FoodPet can show a range per meal. You can skip it and add it later.'
+      : 'Targets only recalculate when you change something here.',
+    body => {
+      body.innerHTML = `
+        <div class="field-grid">
+          <label class="fieldwrap"><span>Age</span>
+            <input class="field" id="f-age" type="number" inputmode="numeric" min="13" max="100" value="${p.age}"></label>
+          <label class="fieldwrap"><span>Weight (kg)</span>
+            <input class="field" id="f-weight" type="number" inputmode="decimal" min="30" max="250" value="${p.weight}"></label>
+          <label class="fieldwrap"><span>Height (cm)</span>
+            <input class="field" id="f-height" type="number" inputmode="numeric" min="120" max="220" value="${p.height}"></label>
+          <label class="fieldwrap"><span>Sex</span>
+            <select class="field" id="f-sex">
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="unspecified">Rather not say</option>
+            </select></label>
+        </div>
+        <label class="fieldwrap"><span>Activity</span>
+          <select class="field" id="f-activity">
+            ${ACTIVITY.map(a => `<option value="${a.id}">${a.label} — ${a.hint}</option>`).join('')}
+          </select></label>
+        <p class="sheet-note" id="f-preview"></p>`;
+
+      document.getElementById('f-sex').value = p.sex;
+      document.getElementById('f-activity').value = p.activity;
+
+      const read = () => ({
+        age: +document.getElementById('f-age').value,
+        weight: +document.getElementById('f-weight').value,
+        height: +document.getElementById('f-height').value,
+        sex: document.getElementById('f-sex').value,
+        activity: document.getElementById('f-activity').value,
+      });
+      const preview = () => {
+        const d = read();
+        const ok = d.age > 0 && d.weight > 0 && d.height > 0;
+        document.getElementById('f-preview').textContent = ok
+          ? `That works out to about ${Math.round(bmrOf(d) * (ACTIVITY.find(a => a.id === d.activity).factor))} kcal a day.`
+          : 'Fill in age, weight and height to see your estimate.';
+      };
+      body.querySelectorAll('.field').forEach(el => el.addEventListener('input', preview));
+      preview();
+
+      const save2 = document.createElement('button');
+      save2.className = 'btn primary';
+      save2.textContent = firstRun ? 'Start' : 'Save';
+      save2.onclick = () => {
+        const d = read();
+        if (!(d.age > 0 && d.weight > 0 && d.height > 0)){ preview(); return; }
+        S.profile = { ...d, updated: new Date().toISOString() };
+        save();
+        closeSheet();
+        renderAll();
+      };
+      body.appendChild(save2);
+
+      const later = document.createElement('button');
+      later.className = 'linkbtn wide';
+      later.textContent = firstRun ? 'Maybe later' : 'Cancel';
+      later.onclick = closeSheet;
+      body.appendChild(later);
+    });
 }
 
 /* ---------------- pixel pet ---------------- */
@@ -191,8 +403,8 @@ const SPRITE = [
   '.DBBBBBBBBBBBBD.',
   '.DBBBBBBBBBBBBD.',
   'DBBBBBBBBBBBBBBD',
-  'DBB##BBBB##BBBBD',
-  'DBB##BBBB##BBBBD',
+  'DBBB##BBBB##BBBD',
+  'DBBB##BBBB##BBBD',
   'DBBBBBBBBBBBBBBD',
   'DBCCBB@@@@BBCCBD',
   'DBCCBBB@@BBBCCBD',
@@ -201,6 +413,7 @@ const SPRITE = [
   '...DDBBBBBBDD...',
   '.....DD..DD.....',
 ];
+const COLS = SPRITE[0].length, ROWS = SPRITE.length;
 const HAT_ROWS = {
   none:   [],
   beanie: ['....aaaaaaaa....','...abbbbbbbba...','..aaaaaaaaaaaa..'],
@@ -215,7 +428,12 @@ const pet = (() => {
   const cx = cv.getContext('2d');
   const PX = 16;
   const OY = 4;          // rows of headroom above the pet, so tall hats fit
-  let mood = 'ok', eatUntil = 0, t0 = performance.now();
+  const OX = 1;          // a column of breathing room either side, so the pet
+  const OB = 2;          // never touches the frame, and rows below for bob + shadow
+  let mood = 'ok', baseMood = 'ok', eatUntil = 0, tempUntil = 0, t0 = performance.now();
+
+  cv.width  = (COLS + OX*2) * PX;
+  cv.height = (ROWS + OY + OB) * PX;
 
   function palette(){ return PALETTES.find(p => p.id === S.wearing.palette) || PALETTES[0]; }
 
@@ -224,22 +442,19 @@ const pet = (() => {
     const eating = performance.now() < eatUntil;
     const chomp = eating && Math.floor(performance.now()/160) % 2 === 0;
 
-    if (eating || mood === 'happy'){                       // bright open eyes
-      // default sprite eyes are already open
-    } else if (mood === 'tired'){                          // soft closed eyes
+    // --- eyes --- (the base sprite's are already wide open)
+    if (mood === 'tired' || mood === 'sleepy'){          // soft closed lids
       r[7] = 'DBBBBBBBBBBBBBBD';
-      r[8] = 'DBB##BBBB##BBBBD';
-    } else if (mood === 'sleepy'){
-      r[7] = 'DBBBBBBBBBBBBBBD';
-      r[8] = 'DBB##BBBB##BBBBD';
+      r[8] = 'DBBB##BBBB##BBBD';
     }
-    if (chomp){                                            // wide-open mouth
+    // --- mouth ---
+    if (chomp){                                          // wide open, mid-bite
       r[10] = 'DBCCBB@@@@BBCCBD';
       r[11] = 'DBCCBB@@@@BBCCBD';
-    } else if (mood === 'tired'){                          // small neutral mouth
+    } else if (mood === 'tired' || mood === 'sleepy'){    // small neutral mouth
       r[10] = 'DBCCBBB@@BBBCCBD';
       r[11] = 'DBCCBBBBBBBBCCBD';
-    } else if (mood === 'ok'){
+    } else if (mood === 'ok'){                            // content little smile
       r[11] = 'DBCCBBB@@BBBCCBD';
     }
     return r;
@@ -257,7 +472,7 @@ const pet = (() => {
 
     // shadow
     cx.fillStyle = 'rgba(120,100,150,.12)';
-    cx.fillRect(PX*3, PX*(15+OY) + 4, PX*10, PX*0.6);
+    cx.fillRect(PX*(3+OX), PX*(ROWS-1+OY) + PX, PX*10, PX*0.6);
 
     const colors = { B:p.body, D:p.dark, C:p.cheek, '#':'#3a3350', '@':'#7d4a54' };
     const body = rows();
@@ -266,7 +481,7 @@ const pet = (() => {
         const c = colors[body[y][x]];
         if (!c) continue;
         cx.fillStyle = c;
-        cx.fillRect(x*PX, (y+OY)*PX + bob, PX, PX);
+        cx.fillRect((x+OX)*PX, (y+OY)*PX + bob, PX, PX);
       }
 
     // hat sits on the head, riding the same bob
@@ -279,7 +494,7 @@ const pet = (() => {
           const ch = hr[y][x];
           if (ch === '.') continue;
           cx.fillStyle = ch === 'a' ? hat.a : hat.b;
-          cx.fillRect(x*PX, (top + y)*PX + bob, PX, PX);
+          cx.fillRect((x+OX)*PX, (top + y)*PX + bob, PX, PX);
         }
     }
 
@@ -289,15 +504,23 @@ const pet = (() => {
       cx.font = '38px serif';
       cx.textAlign = 'center';
       cx.globalAlpha = Math.max(0, 1 - k);
-      cx.fillText('🥗', cv.width/2, PX*(10+OY) + bob - (1-k)*30 + 28);
+      cx.fillText('\u{1F957}', cv.width/2, PX*(10+OY) + bob - (1-k)*30 + 28);
       cx.globalAlpha = 1;
     }
     requestAnimationFrame(draw);
   }
   requestAnimationFrame(draw);
 
+  function apply(m){ if (m !== mood){ mood = m; t0 = performance.now(); } }
+
   return {
-    setMood(m){ if (m !== mood){ mood = m; t0 = performance.now(); } },
+    setMood(m){ baseMood = m; if (performance.now() >= tempUntil) apply(m); },
+    // A brief reaction to one meal, which fades back to how the day is going.
+    tempMood(m, ms){
+      tempUntil = performance.now() + ms;
+      apply(m);
+      setTimeout(() => { if (performance.now() >= tempUntil) apply(baseMood); }, ms + 50);
+    },
     eat(){ eatUntil = performance.now() + 1500; },
   };
 })();
@@ -436,6 +659,20 @@ function floatPoints(text){
   setTimeout(() => el.remove(), 1000);
 }
 
+let noteTimer = null;
+function showNote({ icon, text }){
+  const el = document.getElementById('pet-note');
+  el.textContent = `${icon}  ${text}`;
+  el.hidden = false;
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => { el.hidden = true; }, 9000);
+}
+
+function hideNote(){
+  clearTimeout(noteTimer);
+  document.getElementById('pet-note').hidden = true;
+}
+
 function renderPet(){
   const mood = moodNow();
   pet.setMood(mood);
@@ -465,7 +702,7 @@ function renderPet(){
   btn.textContent = logged ? '✓ Logged' : 'I ate this';
   btn.className = 'btn ' + (logged ? 'done' : 'primary');
   btn.disabled = logged;
-  btn.onclick = () => logMeal(meal.id);
+  btn.onclick = () => startLog(meal.id);
 
   // today's pips
   const pips = document.getElementById('pips');
@@ -478,6 +715,19 @@ function renderPet(){
     pips.appendChild(d);
   }
   document.getElementById('today-count').textContent = loggedToday() + ' of ' + MEALS.length;
+}
+
+// The range is guidance, not a rule — shown plainly, without a progress bar to chase.
+function fuelLine(meal, state){
+  const target = slotTarget(meal.id);
+  if (!target) return '';
+  const logged = kcalOf(today(), meal.id);
+  if (state === 'logged'){
+    return logged == null
+      ? `<p class="meal-fuel">Usual range ${target.min}–${target.max} kcal</p>`
+      : `<p class="meal-fuel logged-fuel">Logged ~${logged} kcal &middot; range ${target.min}–${target.max}</p>`;
+  }
+  return `<p class="meal-fuel">Usual range ${target.min}–${target.max} kcal</p>`;
 }
 
 function renderMeals(){
@@ -496,6 +746,7 @@ function renderMeals(){
         <span class="meal-state${stateCls}">${stateLabel}</span>
       </div>
       <div class="meal-title">${meal.name}</div>
+      ${fuelLine(meal, st)}
       <p class="meal-recipe">${r.name}</p>
       <p class="meal-prep">${r.prep}</p>
       <p class="meal-why">${r.why}</p>`;
@@ -503,7 +754,7 @@ function renderMeals(){
     btn.className = 'btn ' + (st === 'logged' ? 'done' : 'primary');
     btn.textContent = st === 'logged' ? '✓ Logged' : 'I ate this';
     btn.disabled = st === 'logged';
-    btn.onclick = () => logMeal(meal.id);
+    btn.onclick = () => startLog(meal.id);
     el.appendChild(btn);
     if (st !== 'logged'){
       const re = document.createElement('button');
@@ -598,6 +849,45 @@ function renderWeek(){
   document.getElementById('wk-streak').textContent = S.streak;
   document.getElementById('wk-points').textContent = S.points;
   document.getElementById('wk-perfect').textContent = S.perfectDays.filter(k => days.includes(k)).length;
+  renderFuel(days);
+}
+
+function renderFuel(days){
+  const body = document.getElementById('fuel-body');
+  const target = tdee();
+  if (!target){
+    body.innerHTML = `<p class="muted small">Add your details and FoodPet will show a gentle calorie
+      range for each meal slot. Entirely optional.</p>`;
+    return;
+  }
+  const p = S.profile;
+
+  // Only days where something was actually estimated — a day you didn't log
+  // isn't a day you didn't eat, so it shouldn't drag the average down.
+  const withEstimates = days.filter(k => MEALS.some(m => kcalOf(k, m.id) != null));
+  const avg = withEstimates.length
+    ? Math.round(withEstimates.reduce((sum, k) => sum + dayKcal(k), 0) / withEstimates.length)
+    : null;
+
+  body.innerHTML = `
+    <div class="fuel-top">
+      <div><span class="fuel-num">${target}</span><span class="fuel-lbl">daily target</span></div>
+      <div><span class="fuel-num">${avg == null ? '—' : avg}</span><span class="fuel-lbl">avg logged</span></div>
+    </div>
+    <p class="muted small">
+      ${avg == null
+        ? 'Log a few estimates and your weekly average appears here.'
+        : `Averaged over ${withEstimates.length} day${withEstimates.length === 1 ? '' : 's'} where you estimated at least one meal. Partly logged days read low — that is expected.`}
+    </p>
+    <p class="muted small fuel-basis">
+      BMR ${bmrOf(p)} kcal &middot; ${activityOf(p).label} &times;${activityOf(p).factor}
+    </p>
+    <div class="slot-targets">
+      ${MEALS.map(m => {
+        const t = slotTarget(m.id);
+        return `<div class="slot-row"><span>${m.name}</span><span class="slot-range">${t.min}–${t.max}</span></div>`;
+      }).join('')}
+    </div>`;
 }
 
 function updateNotifyUI(){
@@ -640,12 +930,16 @@ document.getElementById('btn-sound').onclick = () => {
   if (S.soundOn) jingle('eat');
 };
 document.getElementById('banner-close').onclick = () => { document.getElementById('banner').hidden = true; };
+document.getElementById('btn-profile').onclick = () => openProfileSheet(false);
+document.getElementById('sheet-backdrop').onclick = closeSheet;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 document.addEventListener('click', unlockAudio, { once:true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden){ renderAll(); tick(); } });
 
 ensureDay();
 renderAll();
-catchUpOnOpen();
+if (!S.profile) openProfileSheet(true);   // first launch: ask once, skippable
+else catchUpOnOpen();
 setInterval(tick, 20000);
 setInterval(renderAll, 60000);
 })();
