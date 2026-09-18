@@ -6,7 +6,7 @@
 'use strict';
 
 /* ---------------- meal schedule ---------------- */
-const MEALS = [
+const MEAL_DEFS = [
   { id:'breakfast',   name:'Breakfast',            h:7,  m:0  },
   { id:'midmorning',  name:'Mid-Morning Fuel',     h:10, m:0  },
   { id:'lunch',       name:'Lunch',                h:12, m:30 },
@@ -14,13 +14,25 @@ const MEALS = [
   { id:'postworkout', name:'Post-Workout Recovery',h:16, m:15 },
   { id:'dinner',      name:'Dinner',               h:18, m:30 },
 ];
+// The live schedule: defaults unless Settings overrides a time. Kept sorted, so
+// "next up" and the weekly grid follow the clock rather than the original order.
+let MEALS = MEAL_DEFS.map(m => ({ ...m }));
+function applyTimes(){
+  MEALS = MEAL_DEFS.map(d => {
+    const t = (S.times || {})[d.id];
+    if (!t) return { ...d };
+    const [h, m] = t.split(':').map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? { ...d, h, m } : { ...d };
+  }).sort((a, b) => (a.h*60 + a.m) - (b.h*60 + b.m));
+}
+const hhmm = meal => `${pad(meal.h)}:${pad(meal.m)}`;
 const RECIPES = window.FOODPET_RECIPES;
 const POINTS_PER_MEAL = 10;
 const PERFECT_BONUS = 20;
 const NO_REPEAT_DAYS = 6;      // a slot won't repeat an idea within this many picks
 const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
 const NOTIFY_GRACE_MIN = 15;   // fire a reminder only within this long after the time
-const APP_VERSION = 'v3 — calorie ranges';
+const APP_VERSION = 'v4 — settings';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -65,6 +77,8 @@ const HATS = [
 const KEY = 'foodpet.v1';
 const blank = () => ({
   profile: null,      // { age, weight, height, sex, activity } — set once, edited on request
+  times: {},          // slotId -> 'HH:MM' override from Settings
+  showFuel: true,     // calorie ranges and the portion prompt can be switched off
   points: 0,
   streak: 0,
   lastStreakDay: null,
@@ -264,7 +278,7 @@ function logMeal(slotId, kcal = null){
 // The estimate sheet: tap a portion, or type a number if you know it.
 function startLog(slotId){
   unlockAudio();
-  if (!S.profile){ logMeal(slotId); return; }   // no profile, no targets — just log it
+  if (!S.profile || !S.showFuel){ logMeal(slotId); return; }  // nothing to compare against
 
   const meal = MEALS.find(m => m.id === slotId);
   const recipe = recipeFor(slotId);
@@ -595,9 +609,9 @@ function notifyState(){ return notifySupported() ? Notification.permission : 'un
 
 async function askNotify(){
   unlockAudio();
-  if (!notifySupported()){ updateNotifyUI(); return; }
+  if (!notifySupported()){ updateNotifyUI(); renderSettings(); return; }
   try { await Notification.requestPermission(); } catch {}
-  updateNotifyUI();
+  updateNotifyUI(); renderSettings();
   if (Notification.permission === 'granted'){
     showNotification('FoodPet is watching over you', 'Reminders are on. Keep this tab or the app open and I will chime at meal times.');
     jingle('meal');
@@ -729,6 +743,7 @@ function renderPet(){
 
 // The range is guidance, not a rule — shown plainly, without a progress bar to chase.
 function fuelLine(meal, state){
+  if (!S.showFuel) return '';
   const target = slotTarget(meal.id);
   if (!target) return '';
   const logged = kcalOf(today(), meal.id);
@@ -865,6 +880,8 @@ function renderWeek(){
 
 function renderFuel(days){
   const body = document.getElementById('fuel-body');
+  document.getElementById('fuel-card').hidden = !S.showFuel;
+  if (!S.showFuel) return;
   const target = tdee();
   if (!target){
     body.innerHTML = `<p class="muted small">Add your details and FoodPet will show a gentle calorie
@@ -901,29 +918,153 @@ function renderFuel(days){
     </div>`;
 }
 
-function updateNotifyUI(){
-  const btn = document.getElementById('btn-notify');
-  const note = document.getElementById('notify-note');
-  const st = notifyState();
-  if (st === 'granted'){
-    btn.textContent = 'Reminders on ✓';
-    note.textContent = 'Reminders chime at each meal time while FoodPet is open or installed in the background.';
-  } else if (st === 'denied'){
-    btn.textContent = 'Reminders blocked';
-    note.textContent = 'Notifications are blocked in your browser settings — FoodPet will show a gentle in-app banner instead.';
-  } else if (st === 'unsupported'){
-    btn.textContent = 'Reminders unavailable';
-    note.textContent = 'This browser has no notifications — FoodPet will show an in-app banner when a meal is due.';
+/* ---------------- settings ---------------- */
+function renderSettings(){
+  // profile summary
+  const box = document.getElementById('set-profile');
+  if (!S.profile){
+    box.innerHTML = `<p class="muted small">No details yet. Add them and FoodPet can show a
+      gentle calorie range per meal — entirely optional.</p>`;
   } else {
-    btn.textContent = 'Turn on reminders';
-    note.textContent = 'Add FoodPet to your home screen, then turn reminders on for meal-time notifications with a jingle.';
+    const p = S.profile;
+    const sexLabel = p.sex === 'female' ? 'Female' : p.sex === 'male' ? 'Male' : 'Unspecified';
+    box.innerHTML = `
+      <div class="set-facts">
+        <div><span>${p.age}</span>years</div>
+        <div><span>${p.weight}</span>kg</div>
+        <div><span>${p.height}</span>cm</div>
+        <div><span>${tdee()}</span>kcal/day</div>
+      </div>
+      <p class="muted small">${sexLabel} &middot; ${activityOf(p).label} &middot; BMR ${bmrOf(p)} kcal</p>`;
   }
-  document.getElementById('btn-sound').textContent = 'Sound: ' + (S.soundOn ? 'on' : 'off');
+
+  // reminders
+  const st = notifyState();
+  const nb = document.getElementById('set-notify');
+  nb.textContent = st === 'granted' ? 'On' : st === 'denied' ? 'Blocked' : st === 'unsupported' ? 'N/A' : 'Turn on';
+  nb.className = 'chipbtn' + (st === 'granted' ? ' on' : '');
+  nb.disabled = st !== 'default';
+  document.getElementById('set-notify-state').textContent =
+    st === 'granted' ? 'a notification at each meal time' :
+    st === 'denied'  ? 'blocked in your browser settings' :
+    st === 'unsupported' ? 'this browser has no notifications' :
+                       'not turned on yet';
+  document.getElementById('set-notify-note').textContent =
+    st === 'granted'
+      ? 'Reminders fire while FoodPet is open or alive in the background. If your phone has closed it completely, you will see a banner next time you open the app instead.'
+      : 'Without notifications FoodPet shows a gentle in-app banner when you open it near a meal time.';
+
+  setSwitch('set-sound', S.soundOn);
+  setSwitch('set-fuel', S.showFuel);
+
+  // meal times
+  const times = document.getElementById('set-times');
+  times.innerHTML = '';
+  for (const meal of MEALS){
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    row.innerHTML = `<div class="set-label">${meal.name}</div>`;
+    const input = document.createElement('input');
+    input.type = 'time';
+    input.className = 'field time-field';
+    input.value = hhmm(meal);
+    input.onchange = () => {
+      if (!input.value) { input.value = hhmm(meal); return; }
+      S.times[meal.id] = input.value;
+      applyTimes(); save(); renderAll();
+    };
+    row.appendChild(input);
+    times.appendChild(row);
+  }
+
+  document.getElementById('set-about').textContent =
+    `FoodPet ${APP_VERSION} · everything stored on this device`;
+}
+
+function setSwitch(id, on){
+  const el = document.getElementById(id);
+  el.classList.toggle('on', !!on);
+  el.setAttribute('aria-checked', on ? 'true' : 'false');
+}
+
+function copyBackup(){
+  const data = JSON.stringify(S, null, 2);
+  const done = () => openSheet('Backup copied', 'Paste it somewhere safe — a note to yourself is fine. Restoring it later brings back your meals, points and profile.', b => {
+    const ok = document.createElement('button');
+    ok.className = 'btn primary'; ok.textContent = 'Done'; ok.onclick = closeSheet;
+    b.appendChild(ok);
+  });
+  // Clipboard access isn't available everywhere (older browsers, some in-app
+  // browsers), so fall back to text you can select and copy by hand.
+  const fallback = () => openSheet('Your backup', 'Copy this text and keep it somewhere safe.', b => {
+    const ta = document.createElement('textarea');
+    ta.className = 'field'; ta.rows = 8; ta.readOnly = true; ta.value = data;
+    b.appendChild(ta);
+    const ok = document.createElement('button');
+    ok.className = 'btn primary'; ok.textContent = 'Done'; ok.onclick = closeSheet;
+    b.appendChild(ok);
+    ta.focus(); ta.select();
+  });
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(data).then(done).catch(fallback);
+  } else fallback();
+}
+
+function restoreBackup(){
+  openSheet('Restore a backup', 'Paste a backup below. It replaces what is on this device.', body => {
+    const ta = document.createElement('textarea');
+    ta.className = 'field'; ta.rows = 8; ta.placeholder = '{ "points": … }';
+    body.appendChild(ta);
+    const msg = document.createElement('p');
+    msg.className = 'sheet-note';
+    body.appendChild(msg);
+
+    const go = document.createElement('button');
+    go.className = 'btn primary';
+    go.textContent = 'Restore';
+    go.onclick = () => {
+      let parsed;
+      try { parsed = JSON.parse(ta.value); } catch { msg.textContent = 'That does not look like a backup — check the whole text was pasted.'; return; }
+      if (!parsed || typeof parsed !== 'object' || !('points' in parsed)){
+        msg.textContent = 'That JSON is missing FoodPet data.'; return;
+      }
+      S = Object.assign(blank(), parsed);
+      applyTimes(); save(); closeSheet(); renderAll();
+    };
+    body.appendChild(go);
+
+    const cancel = document.createElement('button');
+    cancel.className = 'linkbtn wide'; cancel.textContent = 'Cancel'; cancel.onclick = closeSheet;
+    body.appendChild(cancel);
+  });
+}
+
+function resetEverything(){
+  openSheet('Start over?', 'This clears your meals, points, streak and profile on this device. It cannot be undone.', body => {
+    const go = document.createElement('button');
+    go.className = 'btn primary danger-btn';
+    go.textContent = 'Yes, clear everything';
+    go.onclick = () => {
+      try { localStorage.removeItem(KEY); } catch {}
+      S = blank();
+      applyTimes(); save(); closeSheet(); renderAll();
+      openProfileSheet(true);
+    };
+    body.appendChild(go);
+    const cancel = document.createElement('button');
+    cancel.className = 'linkbtn wide'; cancel.textContent = 'Keep my data'; cancel.onclick = closeSheet;
+    body.appendChild(cancel);
+  });
+}
+
+function updateNotifyUI(){
+  // The Pet tab only asks once; after that, reminders live in Settings.
+  document.getElementById('notify-prompt').hidden = notifyState() !== 'default';
 }
 
 function renderAll(){
   ensureDay();
-  renderPet(); renderMeals(); renderShop(); renderWeek(); updateNotifyUI();
+  renderPet(); renderMeals(); renderShop(); renderWeek(); renderSettings(); updateNotifyUI();
 }
 
 /* ---------------- wiring ---------------- */
@@ -936,10 +1077,21 @@ document.querySelectorAll('.tab').forEach(tab => {
   };
 });
 document.getElementById('btn-notify').onclick = askNotify;
-document.getElementById('btn-sound').onclick = () => {
-  S.soundOn = !S.soundOn; save(); updateNotifyUI();
+document.getElementById('set-notify').onclick = askNotify;
+document.getElementById('set-sound').onclick = () => {
+  S.soundOn = !S.soundOn; save(); renderSettings();
   if (S.soundOn) jingle('eat');
 };
+document.getElementById('set-fuel').onclick = () => {
+  S.showFuel = !S.showFuel; save(); renderAll();
+};
+document.getElementById('set-edit-profile').onclick = () => openProfileSheet(false);
+document.getElementById('set-times-reset').onclick = () => {
+  S.times = {}; applyTimes(); save(); renderAll();
+};
+document.getElementById('set-export').onclick = copyBackup;
+document.getElementById('set-import').onclick = restoreBackup;
+document.getElementById('set-reset').onclick = resetEverything;
 document.getElementById('banner-close').onclick = () => { document.getElementById('banner').hidden = true; };
 document.getElementById('btn-profile').onclick = () => openProfileSheet(false);
 document.getElementById('sheet-backdrop').onclick = closeSheet;
@@ -947,6 +1099,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet()
 document.addEventListener('click', unlockAudio, { once:true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden){ renderAll(); tick(); } });
 
+applyTimes();
 ensureDay();
 renderAll();
 if (!S.profile) openProfileSheet(true);   // first launch: ask once, skippable

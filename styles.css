@@ -270,3 +270,53 @@ main{max-width:520px;margin:0 auto}
 .slot-targets{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .slot-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0}
 .slot-range{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- settings ---------- */
+.set-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.set-head .h2{margin:0}
+.set-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:11px 0;border-bottom:1px solid var(--line);
+}
+.set-row:last-child{border-bottom:none}
+.set-label{font-weight:700;font-size:14px;display:flex;flex-direction:column;gap:2px}
+.set-hint{font-weight:600;font-size:12px;color:var(--ink-soft)}
+.set-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 8px}
+.set-facts>div{
+  text-align:center;background:var(--bg);border-radius:14px;padding:9px 2px;
+  font-size:11px;color:var(--ink-soft);
+}
+.set-facts span{display:block;font-size:17px;font-weight:800;color:var(--ink)}
+.time-field{width:auto;min-width:104px;text-align:center;padding:8px 10px;font-size:15px}
+.setbtn{margin-top:8px}
+.btn.ghost.danger{color:#a8546a;border-color:#eccdd6}
+@media (prefers-color-scheme: dark){ .btn.ghost.danger{color:#f0a9bc;border-color:#5a3d49} }
+.btn.primary.danger-btn{background:#c2778b;border-color:#a8546a;box-shadow:0 4px 0 #a8546a}
+.notify-prompt{text-align:center}
+
+/* toggle switch */
+.switch{
+  flex:0 0 auto;width:50px;height:30px;border-radius:99px;cursor:pointer;
+  background:var(--line);border:1px solid var(--line);padding:0;position:relative;
+  transition:background .2s ease;
+}
+.switch span{
+  position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;
+  background:var(--card);box-shadow:0 1px 3px rgba(80,60,110,.3);
+  transition:transform .2s ease;
+}
+.switch.on{background:var(--accent);border-color:var(--accent-deep)}
+.switch.on span{transform:translateX(20px)}
+
+/* small state button */
+.chipbtn{
+  font:inherit;font-size:13px;font-weight:800;cursor:pointer;
+  background:var(--card);color:var(--accent-deep);
+  border:1px solid var(--accent);border-radius:99px;padding:7px 16px;
+}
+.chipbtn.on{background:var(--mint);border-color:#9ccfba;color:#2f5a49}
+.chipbtn:disabled{cursor:default;opacity:.85}
+
+/* five tabs need a little less room each */
+.tab{max-width:96px;font-size:10px}
+.tab span{font-size:18px}

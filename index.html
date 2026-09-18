@@ -69,11 +69,10 @@
       <div class="pips" id="pips"></div>
     </div>
 
-    <div class="notify-row">
-      <button class="btn ghost" id="btn-notify">Turn on reminders</button>
-      <button class="btn ghost" id="btn-sound">Sound: on</button>
+    <div class="card notify-prompt" id="notify-prompt" hidden>
+      <p class="small" style="margin:0 0 10px">Want a nudge at each meal time? FoodPet can chime and show a notification.</p>
+      <button class="btn primary" id="btn-notify">Turn on reminders</button>
     </div>
-    <p class="fineprint" id="notify-note"></p>
   </section>
 
   <!-- ---------------- MEALS ---------------- -->
@@ -128,6 +127,52 @@
     </div>
     <p class="fineprint" id="app-version"></p>
   </section>
+  <!-- ---------------- SETTINGS ---------------- -->
+  <section id="view-settings" class="view" hidden>
+    <div class="card">
+      <div class="set-head"><h2 class="h2">You</h2>
+        <button class="linkbtn" id="set-edit-profile">Edit</button></div>
+      <div id="set-profile"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="h2">Reminders</h2>
+      <div class="set-row">
+        <div class="set-label">Meal reminders<span id="set-notify-state" class="set-hint"></span></div>
+        <button class="chipbtn" id="set-notify"></button>
+      </div>
+      <div class="set-row">
+        <div class="set-label">Jingle<span class="set-hint">a short chime when a meal is due</span></div>
+        <button class="switch" id="set-sound" role="switch"><span></span></button>
+      </div>
+      <p class="muted small" id="set-notify-note"></p>
+    </div>
+
+    <div class="card">
+      <div class="set-head"><h2 class="h2">Meal times</h2>
+        <button class="linkbtn" id="set-times-reset">Reset</button></div>
+      <div id="set-times"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="h2">Calorie guidance</h2>
+      <div class="set-row">
+        <div class="set-label">Show calorie ranges<span class="set-hint">portion prompt, ranges and weekly average</span></div>
+        <button class="switch" id="set-fuel" role="switch"><span></span></button>
+      </div>
+      <p class="muted small">Turn this off and FoodPet goes back to simply logging meals — your profile is kept, nothing is deleted.</p>
+    </div>
+
+    <div class="card">
+      <h2 class="h2">Your data</h2>
+      <p class="muted small">Everything lives on this device only. Nothing is uploaded anywhere.</p>
+      <button class="btn ghost setbtn" id="set-export">Copy a backup</button>
+      <button class="btn ghost setbtn" id="set-import">Restore from a backup</button>
+      <button class="btn ghost setbtn danger" id="set-reset">Start over</button>
+    </div>
+
+    <p class="fineprint" id="set-about"></p>
+  </section>
 </main>
 
 <nav class="tabs">
@@ -135,6 +180,7 @@
   <button class="tab" data-view="meals"><span>🍽️</span>Meals</button>
   <button class="tab" data-view="shop"><span>🎩</span>Closet</button>
   <button class="tab" data-view="week"><span>📅</span>Week</button>
+  <button class="tab" data-view="settings"><span>⚙️</span>Settings</button>
 </nav>
 
 <div id="sheet-wrap" class="sheet-wrap" hidden>

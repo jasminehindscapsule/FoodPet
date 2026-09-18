@@ -134,6 +134,23 @@ manifest.webmanifest     PWA metadata
 icons/                   generated pixel-pet PNGs
 ```
 
+## Settings
+
+The fifth tab gathers everything adjustable:
+
+- **You** — your profile and the resulting BMR and daily target. Editing it is the only
+  thing that recalculates the per-meal ranges.
+- **Reminders** — turn notifications on (the Pet tab stops asking once you've answered),
+  and toggle the jingle. The card explains what happens when notifications are off.
+- **Meal times** — each slot's time is editable. The schedule re-sorts itself, so moving
+  dinner earlier than a snack reorders the day correctly everywhere. *Reset* restores the
+  original six times.
+- **Calorie guidance** — switch it off and FoodPet goes back to plain meal logging: no
+  ranges, no portion prompt, no weekly average. Your profile is kept, nothing is deleted.
+- **Your data** — copy a backup (clipboard, or selectable text where the clipboard is
+  unavailable), restore one by pasting it back, or start over. Restore validates the JSON
+  and refuses anything that isn't a FoodPet backup; starting over asks first.
+
 ## Updating a deployed copy
 
 The service worker fetches the app shell **network-first**, so pushing to `main` is
