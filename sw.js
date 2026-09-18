@@ -1,5 +1,13 @@
-/* FoodPet service worker — offline shell + notification clicks. */
-const CACHE = 'foodpet-v1';
+/* FoodPet service worker — offline shell + notification clicks.
+
+   Strategy note: the app shell (HTML/JS/CSS) is fetched network-first, so a new
+   deploy lands on the next load instead of being pinned to whatever was cached
+   the first time. Icons and other static files stay cache-first — they're big,
+   and they change only when their name does. Cached copies are still the
+   fallback, so the app keeps working with no connection.                       */
+
+const VERSION = 'v2';
+const CACHE = `foodpet-${VERSION}`;
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './recipes.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
@@ -17,11 +25,37 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Cache-first for the app shell, network fallback.
+const isShell = req => {
+  if (req.mode === 'navigate') return true;
+  return /\.(?:js|css|webmanifest)$/.test(new URL(req.url).pathname);
+};
+
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  if (new URL(req.url).origin !== self.location.origin) return;
+
+  if (isShell(req)){
+    // Network first: take the fresh copy, keep it for offline, fall back if away.
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy));
+          return res;
+        })
+        .catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Everything else: cache first, network as backup.
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).catch(() => caches.match('./index.html')))
+    caches.match(req).then(hit => hit || fetch(req).then(res => {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(req, copy));
+      return res;
+    }))
   );
 });
 

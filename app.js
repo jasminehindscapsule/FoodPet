@@ -20,6 +20,7 @@ const PERFECT_BONUS = 20;
 const NO_REPEAT_DAYS = 6;      // a slot won't repeat an idea within this many picks
 const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
 const NOTIFY_GRACE_MIN = 15;   // fire a reminder only within this long after the time
+const APP_VERSION = 'v2 — calorie ranges';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -576,8 +577,17 @@ function jingle(kind){
 /* ---------------- notifications ---------------- */
 let swReg = null;
 if ('serviceWorker' in navigator){
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  // A new worker claiming this page means fresh files are ready. Reload once, so
+  // an update never sits behind a stale cached shell.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
   navigator.serviceWorker.register('sw.js')
-    .then(r => { swReg = r; })
+    .then(r => { swReg = r; r.update(); })
     .catch(() => {});
 }
 function notifySupported(){ return 'Notification' in window; }
@@ -849,6 +859,7 @@ function renderWeek(){
   document.getElementById('wk-streak').textContent = S.streak;
   document.getElementById('wk-points').textContent = S.points;
   document.getElementById('wk-perfect').textContent = S.perfectDays.filter(k => days.includes(k)).length;
+  document.getElementById('app-version').textContent = 'FoodPet ' + APP_VERSION;
   renderFuel(days);
 }
 
