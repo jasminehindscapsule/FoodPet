@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FoodPet</title>
+<meta name="theme-color" content="#f6eefb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="FoodPet">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="banner" class="banner" hidden>
+  <div class="banner-body">
+    <strong id="banner-title">Snack time</strong>
+    <span id="banner-text"></span>
+  </div>
+  <button id="banner-close" class="banner-x" aria-label="Dismiss">×</button>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <span>FoodPet</span>
+  </div>
+  <div class="stats">
+    <span class="chip" id="chip-level">Lv 1</span>
+    <span class="chip" id="chip-points">0 pts</span>
+    <span class="chip" id="chip-streak">🔥 0</span>
+  </div>
+</header>
+
+<main>
+  <!-- ---------------- PET ---------------- -->
+  <section id="view-pet" class="view">
+    <div class="pet-shell">
+      <div class="pet-screen">
+        <canvas id="pet-canvas" width="256" height="320" aria-label="Your FoodPet"></canvas>
+      </div>
+      <p id="pet-mood" class="pet-mood">Waking up…</p>
+      <div class="xp-wrap" title="Progress to next level">
+        <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+        <span class="xp-label" id="xp-label"></span>
+      </div>
+    </div>
+
+    <div class="card next-card">
+      <div class="next-head">
+        <span class="next-kicker" id="next-kicker">Next up</span>
+        <span class="next-time" id="next-time">—</span>
+      </div>
+      <h2 class="next-name" id="next-meal">—</h2>
+      <p class="next-recipe" id="next-recipe">—</p>
+      <p class="next-why" id="next-why"></p>
+      <button class="btn primary" id="next-log">I ate this</button>
+    </div>
+
+    <div class="card">
+      <div class="today-head">
+        <span>Today</span>
+        <span class="muted" id="today-count">0 of 6</span>
+      </div>
+      <div class="pips" id="pips"></div>
+    </div>
+
+    <div class="notify-row">
+      <button class="btn ghost" id="btn-notify">Turn on reminders</button>
+      <button class="btn ghost" id="btn-sound">Sound: on</button>
+    </div>
+    <p class="fineprint" id="notify-note"></p>
+  </section>
+
+  <!-- ---------------- MEALS ---------------- -->
+  <section id="view-meals" class="view" hidden>
+    <div id="meal-list"></div>
+  </section>
+
+  <!-- ---------------- SHOP ---------------- -->
+  <section id="view-shop" class="view" hidden>
+    <div class="card">
+      <h2 class="h2">Pet closet</h2>
+      <p class="muted small">Points unlock looks. Tap an unlocked one to wear it.</p>
+    </div>
+    <h3 class="group-title">Colours</h3>
+    <div class="grid" id="palette-grid"></div>
+    <h3 class="group-title">Hats</h3>
+    <div class="grid" id="hat-grid"></div>
+  </section>
+
+  <!-- ---------------- WEEK ---------------- -->
+  <section id="view-week" class="view" hidden>
+    <div class="card">
+      <h2 class="h2">This week</h2>
+      <div class="week-stats">
+        <div class="stat"><span class="stat-num" id="wk-logged">0</span><span class="stat-lbl">logged</span></div>
+        <div class="stat"><span class="stat-num" id="wk-missed">0</span><span class="stat-lbl">not logged</span></div>
+        <div class="stat"><span class="stat-num" id="wk-streak">0</span><span class="stat-lbl">day streak</span></div>
+        <div class="stat"><span class="stat-num" id="wk-points">0</span><span class="stat-lbl">points</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 class="h3">Last 7 days</h3>
+      <div id="week-rows"></div>
+      <p class="muted small legend">
+        <span class="legend-dot done"></span> logged
+        <span class="legend-dot waiting"></span> waiting
+        <span class="legend-dot future"></span> to come
+      </p>
+    </div>
+    <div class="card">
+      <h3 class="h3">Perfect days</h3>
+      <p class="muted small">All six logged in a day earns a +20 bonus.</p>
+      <p class="big-num" id="wk-perfect">0</p>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button class="tab active" data-view="pet"><span>🥚</span>Pet</button>
+  <button class="tab" data-view="meals"><span>🍽️</span>Meals</button>
+  <button class="tab" data-view="shop"><span>🎩</span>Closet</button>
+  <button class="tab" data-view="week"><span>📅</span>Week</button>
+</nav>
+
+<script src="recipes.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
