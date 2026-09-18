@@ -20,7 +20,7 @@ const PERFECT_BONUS = 20;
 const NO_REPEAT_DAYS = 6;      // a slot won't repeat an idea within this many picks
 const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
 const NOTIFY_GRACE_MIN = 15;   // fire a reminder only within this long after the time
-const APP_VERSION = 'v2 — calorie ranges';
+const APP_VERSION = 'v3 — calorie ranges';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.

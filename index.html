@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
 
@@ -147,7 +147,33 @@
   </div>
 </div>
 
-<script src="recipes.js"></script>
-<script src="app.js"></script>
+<script>
+/* One-time repair.
+
+   The first release shipped a cache-first service worker, which pins a device to
+   whatever build it saw first — a new deploy is downloaded but never served. A
+   device in that state cannot fix itself from the cached copy, because the cached
+   copy contains no repair code. So: on the first load of any build that includes
+   this script, drop every old worker and cache, then reload into the current one.
+
+   Logged meals, points and your profile live in localStorage, which is untouched. */
+(function () {
+  var KEY = 'foodpet.swrepair.v3';
+  try { if (localStorage.getItem(KEY)) return; } catch (e) { return; }   // storage blocked: skip
+  if (!('serviceWorker' in navigator)) { try { localStorage.setItem(KEY, '1'); } catch (e) {} return; }
+
+  navigator.serviceWorker.getRegistrations().then(function (regs) {
+    try { localStorage.setItem(KEY, '1'); } catch (e) {}                 // set first: never loop
+    if (!regs.length) return;
+    return Promise.all(regs.map(function (r) { return r.unregister(); }))
+      .then(function () { return caches.keys(); })
+      .then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+      .then(function () { location.reload(); });
+  }).catch(function () {});
+})();
+</script>
+
+<script src="recipes.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

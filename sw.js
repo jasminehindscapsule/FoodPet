@@ -6,10 +6,10 @@
    and they change only when their name does. Cached copies are still the
    fallback, so the app keeps working with no connection.                       */
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `foodpet-${VERSION}`;
 const ASSETS = [
-  './', './index.html', './styles.css', './app.js', './recipes.js',
+  './', './index.html', './styles.css?v=3', './app.js?v=3', './recipes.js?v=3',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
 ];
 
