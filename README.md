@@ -134,6 +134,20 @@ manifest.webmanifest     PWA metadata
 icons/                   generated pixel-pet PNGs
 ```
 
+## Updating a deployed copy
+
+The service worker fetches the app shell **network-first**, so pushing to `main` is
+enough — the next load picks up the new build, and if a new worker takes over a page
+that was already running, the app reloads itself once so you never sit on stale files.
+Cached copies remain the offline fallback.
+
+Only bump `VERSION` in [sw.js](sw.js) if you change what's in `ASSETS` or want to force
+every cache to be dropped. The running build is printed at the foot of the Week tab, so
+you can always see which version a device actually has.
+
+If a device is somehow still stuck on an old build: close every tab (or fully close the
+home-screen app) and reopen. Failing that, clear that site's data in browser settings.
+
 ## Resetting
 
 To wipe progress, open the console and run:

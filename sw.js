@@ -36,9 +36,12 @@ self.addEventListener('fetch', e => {
   if (new URL(req.url).origin !== self.location.origin) return;
 
   if (isShell(req)){
-    // Network first: take the fresh copy, keep it for offline, fall back if away.
+    // Network first, and revalidate rather than trusting the HTTP cache — Pages
+    // serves these with max-age=600, which would otherwise delay a deploy by up
+    // to ten minutes. Falls back to the cached copy when there's no connection.
+    const fresh = new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' });
     e.respondWith(
-      fetch(req)
+      fetch(fresh)
         .then(res => {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(req, copy));
