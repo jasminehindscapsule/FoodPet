@@ -1,0 +1,18 @@
+name = "foodpet-reminders"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Every five minutes; the worker decides whose meal time has just passed.
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Created by: npx wrangler kv namespace create SUBS
+[[kv_namespaces]]
+binding = "SUBS"
+id = "REPLACE_WITH_YOUR_KV_ID"
+
+[vars]
+VAPID_PUBLIC_KEY = "BM-UkBimft3egAkaEreTTS8CfVSxtNg5wmc64WO0nZcqijyaA9DS05fMujOdP8PKR_xrQ2tjkxD_HMRMdZpCIC4"
+VAPID_SUBJECT = "mailto:jasmine.hinds@i4c.org.au"
+# VAPID_PRIVATE_KEY is a secret:
+#   npx wrangler secret put VAPID_PRIVATE_KEY

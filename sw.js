@@ -6,10 +6,10 @@
    and they change only when their name does. Cached copies are still the
    fallback, so the app keeps working with no connection.                       */
 
-const VERSION = 'v3';
+const VERSION = 'v6';
 const CACHE = `foodpet-${VERSION}`;
 const ASSETS = [
-  './', './index.html', './styles.css?v=3', './app.js?v=3', './recipes.js?v=3',
+  './', './index.html', './styles.css?v=3', './app.js?v=3', './recipes.js?v=3', './config.js?v=3',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
 ];
 
@@ -60,6 +60,50 @@ self.addEventListener('fetch', e => {
       return res;
     }))
   );
+});
+
+/* A push from the reminder worker carries no payload — deliberately, so no meal,
+   calorie or profile data is ever sent to a server. The page leaves today's plan
+   in the cache, and we read it here to say something useful. */
+const PLAN_CACHE = 'foodpet-plan';
+
+async function todaysPlan(){
+  try {
+    const cache = await caches.open(PLAN_CACHE);
+    const res = await cache.match('/plan');
+    return res ? await res.json() : null;
+  } catch { return null; }
+}
+
+// Which meal has most recently come due?
+function mealDueNow(plan){
+  if (!plan || !Array.isArray(plan.meals)) return null;
+  const now = new Date();
+  const mins = now.getHours()*60 + now.getMinutes();
+  let best = null;
+  for (const meal of plan.meals){
+    const delta = mins - (meal.h*60 + meal.m);
+    if (delta >= 0 && delta <= 120 && (!best || delta < best.delta)) best = { meal, delta };
+  }
+  return best ? best.meal : null;
+}
+
+self.addEventListener('push', e => {
+  e.waitUntil((async () => {
+    const plan = await todaysPlan();
+    const meal = mealDueNow(plan);
+    const title = meal ? `${meal.name} — ${meal.time}` : 'Time to eat';
+    const body = meal && meal.recipe
+      ? `${meal.recipe.name}. ${meal.recipe.prep}`
+      : 'Open FoodPet to see what is on the menu.';
+    await self.registration.showNotification(title, {
+      body,
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      tag: 'foodpet-meal',
+      renotify: true,
+    });
+  })());
 });
 
 // Tapping a meal reminder focuses the app instead of opening a second copy.

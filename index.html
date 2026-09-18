@@ -145,6 +145,10 @@
         <div class="set-label">Jingle<span class="set-hint">a short chime when a meal is due</span></div>
         <button class="switch" id="set-sound" role="switch"><span></span></button>
       </div>
+      <div class="set-row" id="set-push-row" hidden>
+        <div class="set-label">Background reminders<span id="set-push-hint" class="set-hint"></span></div>
+        <button class="switch" id="set-push" role="switch"><span></span></button>
+      </div>
       <button class="btn ghost setbtn" id="set-test">Send a test reminder</button>
       <p class="muted small" id="set-test-result" hidden></p>
       <p class="muted small" id="set-notify-note"></p>
@@ -221,6 +225,7 @@
 })();
 </script>
 
+<script src="config.js?v=3"></script>
 <script src="recipes.js?v=3"></script>
 <script src="app.js?v=3"></script>
 </body>

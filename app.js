@@ -34,7 +34,7 @@ const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v5 — reminder fixes';
+const APP_VERSION = 'v6 — background reminders';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -81,6 +81,7 @@ const blank = () => ({
   profile: null,      // { age, weight, height, sex, activity } — set once, edited on request
   times: {},          // slotId -> 'HH:MM' override from Settings
   showFuel: true,     // calorie ranges and the portion prompt can be switched off
+  pushOn: false,      // background reminders via the worker in server/
   points: 0,
   streak: 0,
   lastStreakDay: null,
@@ -706,6 +707,94 @@ function catchUpOnOpen(){
   showBanner(`${meal.name} is waiting`, `${r.name} — ${r.prep}`);
 }
 
+/* ---------------- background reminders ---------------- */
+const CFG = window.FOODPET_CONFIG || {};
+const pushConfigured = () => !!(CFG.PUSH_ENDPOINT && CFG.VAPID_PUBLIC_KEY);
+
+// The worker sends an empty push; the service worker fills in the words from
+// this, so meals, recipes and calories never leave the device.
+async function publishPlan(){
+  if (!('caches' in window)) return;
+  try {
+    const plan = {
+      date: today(),
+      meals: MEALS.map(m => {
+        const r = recipeFor(m.id);
+        return { id:m.id, name:m.name, h:m.h, m:m.m, time:clockLabel(m),
+                 recipe:{ name:r.name, prep:r.prep } };
+      }),
+    };
+    const cache = await caches.open('foodpet-plan');
+    await cache.put('/plan', new Response(JSON.stringify(plan),
+      { headers:{ 'content-type':'application/json' } }));
+  } catch {}
+}
+
+const b64ToBytes = b64 => {
+  const pad = (b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g,'+').replace(/_/g,'/');
+  return Uint8Array.from(atob(pad), c => c.charCodeAt(0));
+};
+
+async function pushSubscription(){
+  if (!pushConfigured() || !('serviceWorker' in navigator)) return null;
+  const reg = swReg || await navigator.serviceWorker.ready;
+  if (!reg || !reg.pushManager) return null;
+  return reg.pushManager.getSubscription();
+}
+
+// Times and timezone go to the worker; nothing else does.
+async function syncPush(){
+  if (!S.pushOn) return;
+  const sub = await pushSubscription();
+  if (!sub) return;
+  await postPush('/subscribe', { subscription: sub.toJSON(), times: scheduleForServer(),
+                                 tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
+}
+function scheduleForServer(){
+  const out = {};
+  for (const m of MEALS) out[m.id] = `${pad(m.h)}:${pad(m.m)}`;
+  return out;
+}
+async function postPush(path, body){
+  const res = await fetch(CFG.PUSH_ENDPOINT.replace(/\/$/, '') + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('push server said ' + res.status);
+  return res.json();
+}
+
+async function enablePush(){
+  if (notifyState() !== 'granted'){
+    await askNotify();
+    if (notifyState() !== 'granted') return false;
+  }
+  const reg = swReg || await navigator.serviceWorker.ready;
+  if (!reg || !reg.pushManager) return false;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub){
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: b64ToBytes(CFG.VAPID_PUBLIC_KEY),
+    });
+  }
+  await postPush('/subscribe', { subscription: sub.toJSON(), times: scheduleForServer(),
+                                 tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
+  S.pushOn = true; save();
+  await publishPlan();
+  return true;
+}
+
+async function disablePush(){
+  const sub = await pushSubscription();
+  if (sub){
+    try { await postPush('/unsubscribe', { endpoint: sub.endpoint }); } catch {}
+    try { await sub.unsubscribe(); } catch {}
+  }
+  S.pushOn = false; save();
+}
+
 /* ---------------- rendering ---------------- */
 function floatPoints(text){
   const el = document.createElement('div');
@@ -989,6 +1078,16 @@ function renderSettings(){
   setSwitch('set-sound', S.soundOn);
   setSwitch('set-fuel', S.showFuel);
 
+  // background reminders only make sense once a worker is configured
+  const pushRow = document.getElementById('set-push-row');
+  pushRow.hidden = !pushConfigured();
+  if (pushConfigured()){
+    setSwitch('set-push', S.pushOn);
+    document.getElementById('set-push-hint').textContent = S.pushOn
+      ? 'reminders arrive even when FoodPet is closed'
+      : 'let FoodPet nudge you with the app closed';
+  }
+
   // meal times
   const times = document.getElementById('set-times');
   times.innerHTML = '';
@@ -1003,7 +1102,7 @@ function renderSettings(){
     input.onchange = () => {
       if (!input.value) { input.value = hhmm(meal); return; }
       S.times[meal.id] = input.value;
-      applyTimes(); save(); renderAll();
+      applyTimes(); save(); renderAll(); syncPush();
     };
     row.appendChild(input);
     times.appendChild(row);
@@ -1097,6 +1196,7 @@ function updateNotifyUI(){
 function renderAll(){
   ensureDay();
   renderPet(); renderMeals(); renderShop(); renderWeek(); renderSettings(); updateNotifyUI();
+  publishPlan();
 }
 
 /* ---------------- wiring ---------------- */
@@ -1119,7 +1219,24 @@ document.getElementById('set-fuel').onclick = () => {
 };
 document.getElementById('set-edit-profile').onclick = () => openProfileSheet(false);
 document.getElementById('set-times-reset').onclick = () => {
-  S.times = {}; applyTimes(); save(); renderAll();
+  S.times = {}; applyTimes(); save(); renderAll(); syncPush();
+};
+document.getElementById('set-push').onclick = async () => {
+  const hint = () => document.getElementById('set-push-hint');
+  let problem = null;
+  if (S.pushOn){
+    await disablePush();
+  } else {
+    hint().textContent = 'setting up…';
+    try {
+      if (!await enablePush()) problem = 'needs notification permission first';
+    } catch {
+      problem = 'could not reach the reminder server';
+    }
+  }
+  renderSettings();
+  // after the re-render, or it would be overwritten by the standard hint
+  if (problem) hint().textContent = problem;
 };
 document.getElementById('set-test').onclick = async () => {
   const out = document.getElementById('set-test-result');
