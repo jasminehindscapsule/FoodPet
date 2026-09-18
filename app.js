@@ -31,8 +31,10 @@ const POINTS_PER_MEAL = 10;
 const PERFECT_BONUS = 20;
 const NO_REPEAT_DAYS = 6;      // a slot won't repeat an idea within this many picks
 const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
-const NOTIFY_GRACE_MIN = 15;   // fire a reminder only within this long after the time
-const APP_VERSION = 'v4 — settings';
+const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
+                               // Phones suspend the page, so a tick can easily land
+                               // 20+ minutes late; 15 minutes silently missed most of them.
+const APP_VERSION = 'v5 — reminder fixes';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -613,23 +615,37 @@ async function askNotify(){
   try { await Notification.requestPermission(); } catch {}
   updateNotifyUI(); renderSettings();
   if (Notification.permission === 'granted'){
-    showNotification('FoodPet is watching over you', 'Reminders are on. Keep this tab or the app open and I will chime at meal times.');
+    showNotification('FoodPet is watching over you',
+      'Reminders are on. They arrive while FoodPet is open or recently used.');
     jingle('meal');
   }
 }
-function showNotification(title, body){
+// Returns whether a notification actually appeared, so a failure can be retried
+// rather than silently recorded as delivered.
+async function showNotification(title, body){
   const opts = {
     body,
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
     tag: 'foodpet-meal',
     renotify: true,
-    vibrate: [90, 60, 90],
   };
   try {
-    if (swReg && swReg.showNotification) swReg.showNotification(title, opts);
-    else new Notification(title, opts);
-  } catch {}
+    // Phones require the service worker's showNotification — `new Notification()`
+    // throws an Illegal constructor there — so wait briefly for registration
+    // rather than falling through to a path that cannot work.
+    let reg = swReg;
+    if (!reg && 'serviceWorker' in navigator){
+      reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise(res => setTimeout(() => res(null), 3000)),
+      ]);
+      if (reg) swReg = reg;
+    }
+    if (reg && reg.showNotification){ await reg.showNotification(title, opts); return true; }
+    new Notification(title, opts);   // desktop browsers without a worker
+    return true;
+  } catch { return false; }
 }
 function showBanner(title, text){
   document.getElementById('banner-title').textContent = title;
@@ -637,15 +653,22 @@ function showBanner(title, text){
   document.getElementById('banner').hidden = false;
 }
 
-function remindFor(meal){
+async function remindFor(meal){
   const r = recipeFor(meal.id);
   const title = `${meal.name} — ${clockLabel(meal)}`;
   const body = `${r.name}. ${r.prep}`;
-  if (notifyState() === 'granted') showNotification(title, body);
-  else showBanner(title, `${r.name} — tap Meals to log it.`);
+  let shown;
+  if (notifyState() === 'granted'){
+    shown = await showNotification(title, body);
+    if (!shown) showBanner(title, `${r.name} — tap Meals to log it.`);  // notification failed
+  } else {
+    showBanner(title, `${r.name} — tap Meals to log it.`);
+  }
   jingle('meal');
+  return true;   // either the notification or the banner reached you
 }
 
+const firing = new Set();   // in-flight reminders, so a slow one can't double-fire
 function tick(){
   ensureDay();
   const now = new Date();
@@ -653,23 +676,32 @@ function tick(){
   S.notified[key] = S.notified[key] || [];
   for (const meal of MEALS){
     const mins = (now - mealDate(meal, now)) / 60000;
-    const due = mins >= 0 && mins <= NOTIFY_GRACE_MIN;
-    if (due && !S.notified[key].includes(meal.id) && mealState(meal, now) !== 'logged'){
-      S.notified[key].push(meal.id);
-      save();
-      remindFor(meal);
-    }
+    const due = mins >= 0 && mins <= NOTIFY_WINDOW_MIN;
+    if (!due || S.notified[key].includes(meal.id) || firing.has(meal.id)) continue;
+    if (mealState(meal, now) === 'logged') continue;
+    firing.add(meal.id);
+    // Record it only once something has actually been displayed. Marking first
+    // meant any failure — a worker that wasn't ready yet, say — lost that meal's
+    // reminder for the whole day with nothing to show for it.
+    remindFor(meal)
+      .then(delivered => {
+        if (delivered){ S.notified[key].push(meal.id); save(); }
+      })
+      .finally(() => firing.delete(meal.id));
   }
   renderPet();
 }
 
-// Fallback for a reminder that fired while the app was closed:
-// on open, if something is due right now and unlogged, show the in-app banner.
+// Phones suspend the page, so most reminders are missed at the moment they are
+// due. Whenever the app is opened or brought back, surface anything still waiting.
+let lastBanner = null;
 function catchUpOnOpen(){
   const now = new Date();
   const due = MEALS.filter(m => mealState(m, now) === 'now');
-  if (!due.length) return;
+  if (!due.length){ lastBanner = null; return; }
   const meal = due[due.length-1];
+  if (lastBanner === meal.id) return;          // don't re-announce the same one
+  lastBanner = meal.id;
   const r = recipeFor(meal.id);
   showBanner(`${meal.name} is waiting`, `${r.name} — ${r.prep}`);
 }
@@ -1089,6 +1121,24 @@ document.getElementById('set-edit-profile').onclick = () => openProfileSheet(fal
 document.getElementById('set-times-reset').onclick = () => {
   S.times = {}; applyTimes(); save(); renderAll();
 };
+document.getElementById('set-test').onclick = async () => {
+  const out = document.getElementById('set-test-result');
+  out.hidden = false;
+  const st = notifyState();
+  if (st !== 'granted'){
+    out.textContent = st === 'denied'
+      ? 'Notifications are blocked for this site in your browser settings, so FoodPet uses the in-app banner instead.'
+      : 'Turn reminders on first, then try again.';
+    jingle('meal');
+    return;
+  }
+  out.textContent = 'Sending…';
+  const ok = await showNotification('Test reminder', 'If you can see this, reminders are working.');
+  jingle('meal');
+  out.textContent = ok
+    ? 'Sent. If nothing appeared, check notifications for this app in your phone settings.'
+    : 'Your browser accepted the permission but refused to show it. On iPhone this usually means the app needs to be opened from the home-screen icon rather than a browser tab.';
+};
 document.getElementById('set-export').onclick = copyBackup;
 document.getElementById('set-import').onclick = restoreBackup;
 document.getElementById('set-reset').onclick = resetEverything;
@@ -1097,7 +1147,11 @@ document.getElementById('btn-profile').onclick = () => openProfileSheet(false);
 document.getElementById('sheet-backdrop').onclick = closeSheet;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 document.addEventListener('click', unlockAudio, { once:true });
-document.addEventListener('visibilitychange', () => { if (!document.hidden){ renderAll(); tick(); } });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  renderAll(); tick(); catchUpOnOpen();
+});
+window.addEventListener('focus', () => { tick(); catchUpOnOpen(); });
 
 applyTimes();
 ensureDay();

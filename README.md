@@ -43,15 +43,28 @@ To change a time or add a meal, edit the `MEALS` array at the top of `app.js`.
 ## How reminders work
 
 At each meal time FoodPet fires a system notification with the meal name and that day's
-recipe idea, plus a short four-note jingle. This is a **local** schedule — the app checks
-the clock every 20 seconds while it is open or alive in the background. There is no push
-server, so if the phone has fully evicted the app from memory the notification won't fire.
-The fallback covers that: the next time you open FoodPet near a meal time, a soft in-app
-banner tells you what's waiting. The same banner is used if you decline notification
-permission, so nothing breaks.
+recipe idea, plus a short four-note jingle.
 
-Sound can be toggled with the *Sound* button. Browsers require one tap on the page before
-audio can play, which the first interaction handles.
+**The honest limitation:** this is a *local* schedule with no push server. The app checks
+the clock every 20 seconds, and that check only runs while the page is alive. Phones
+suspend a web app within seconds of you leaving it, so a reminder at 4:15pm will not
+arrive if the app has been closed since lunch. No amount of fixing inside this codebase
+changes that — real background delivery needs a server sending Web Push.
+
+What FoodPet does instead, to lose as little as possible:
+
+- A reminder may still fire up to **90 minutes** after its time, so a check that lands
+  late (a phone waking up, you reopening the app) still delivers it.
+- Reminders are recorded as delivered **only once something has actually been shown**, so
+  a failure is retried rather than silently swallowing that meal for the day.
+- Whenever you open or return to the app, anything still waiting surfaces as an in-app
+  banner — this also covers the case where notification permission was declined.
+- Settings has **Send a test reminder**, which tells you whether delivery works on that
+  device rather than leaving you to wait for a meal time and wonder.
+
+For reminders that arrive reliably with the app closed, use your phone's own scheduler —
+six time-based automations in the iOS Shortcuts app, or plain alarms — and let FoodPet
+handle the logging when you open it.
 
 ## Recipes
 
