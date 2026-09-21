@@ -6,8 +6,9 @@
    and they change only when their name does. Cached copies are still the
    fallback, so the app keeps working with no connection.                       */
 
-const VERSION = 'v6';
+const VERSION = 'v7';
 const CACHE = `foodpet-${VERSION}`;
+const PLAN_CACHE = 'foodpet-plan';   // today's meals + which pushes were shown
 const ASSETS = [
   './', './index.html', './styles.css?v=3', './app.js?v=3', './recipes.js?v=3', './config.js?v=3',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
@@ -18,9 +19,13 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
+  // Keep the plan cache: it holds today's meals and the record of which pushes
+  // have been shown. Sweeping it on a version bump would leave a push with
+  // nothing to say, and could produce a duplicate reminder.
+  const keep = new Set([CACHE, PLAN_CACHE]);
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => !keep.has(k)).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -65,7 +70,6 @@ self.addEventListener('fetch', e => {
 /* A push from the reminder worker carries no payload — deliberately, so no meal,
    calorie or profile data is ever sent to a server. The page leaves today's plan
    in the cache, and we read it here to say something useful. */
-const PLAN_CACHE = 'foodpet-plan';
 
 async function todaysPlan(){
   try {
@@ -88,6 +92,22 @@ function mealDueNow(plan){
   return best ? best.meal : null;
 }
 
+// Leave a record of what was shown, so the page's own timer knows the push
+// already covered this meal and doesn't announce it a second time.
+async function recordShown(slotId){
+  try {
+    const cache = await caches.open(PLAN_CACHE);
+    const res = await cache.match('/shown');
+    const today = new Date();
+    const date = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    let rec = res ? await res.json() : null;
+    if (!rec || rec.date !== date) rec = { date, slots: {} };
+    rec.slots[slotId || 'unknown'] = Date.now();
+    await cache.put('/shown', new Response(JSON.stringify(rec),
+      { headers: { 'content-type': 'application/json' } }));
+  } catch {}
+}
+
 self.addEventListener('push', e => {
   e.waitUntil((async () => {
     const plan = await todaysPlan();
@@ -103,6 +123,7 @@ self.addEventListener('push', e => {
       tag: 'foodpet-meal',
       renotify: true,
     });
+    await recordShown(meal && meal.id);
   })());
 });
 

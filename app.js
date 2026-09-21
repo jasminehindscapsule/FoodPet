@@ -31,10 +31,12 @@ const POINTS_PER_MEAL = 10;
 const PERFECT_BONUS = 20;
 const NO_REPEAT_DAYS = 6;      // a slot won't repeat an idea within this many picks
 const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
+const PUSH_GRACE_MIN = 12;     // with background reminders on, wait this long for the
+                               // push before the app announces a meal itself
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v7.2 — crisper pet';
+const APP_VERSION = 'v7.3 — one reminder per meal';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -798,6 +800,17 @@ async function remindFor(meal){
   return true;   // either the notification or the banner reached you
 }
 
+// Did the service worker already show this meal, from a push?
+async function pushAlreadyShowed(slotId){
+  try {
+    const cache = await caches.open('foodpet-plan');
+    const res = await cache.match('/shown');
+    if (!res) return false;
+    const rec = await res.json();
+    return rec.date === today() && !!(rec.slots || {})[slotId];
+  } catch { return false; }
+}
+
 const firing = new Set();   // in-flight reminders, so a slow one can't double-fire
 function tick(){
   ensureDay();
@@ -813,11 +826,21 @@ function tick(){
     // Record it only once something has actually been displayed. Marking first
     // meant any failure — a worker that wasn't ready yet, say — lost that meal's
     // reminder for the whole day with nothing to show for it.
-    remindFor(meal)
-      .then(delivered => {
-        if (delivered){ S.notified[key].push(meal.id); save(); }
-      })
-      .finally(() => firing.delete(meal.id));
+    (async () => {
+      // With background reminders on, the worker owns delivery. Announcing it
+      // here as well is how you end up with two notifications per meal.
+      if (S.pushOn && notifyState() === 'granted'){
+        if (await pushAlreadyShowed(meal.id)){
+          S.notified[key].push(meal.id); save();
+          return;
+        }
+        // Give the push a chance to arrive before stepping in. If it never
+        // does, the fallback below still reaches you.
+        if (mins < PUSH_GRACE_MIN) return;
+      }
+      const delivered = await remindFor(meal);
+      if (delivered){ S.notified[key].push(meal.id); save(); }
+    })().finally(() => firing.delete(meal.id));
   }
   renderPet();
 }
