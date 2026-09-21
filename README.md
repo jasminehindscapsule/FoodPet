@@ -70,8 +70,9 @@ handle the logging when you open it.
 
 `recipes.js` holds the database — plain JSON, wrapped in a `window.FOODPET_RECIPES =`
 assignment so the app also works straight from `file://` (where `fetch()` of a local JSON
-file is blocked). Six slots, 6–7 ideas each, every entry with a name, a sub-10-minute prep
-line, and why it fits metabolically.
+file is blocked). Six slots, 75 ideas in total, every entry with a name, a sub-10-minute
+prep line, why it fits metabolically, a rough calorie estimate, and the shopping items it
+needs. The vocabulary those items come from is at the foot of the same file.
 
 Each day the app picks one idea per slot, skipping anything used in that slot's last 6
 picks, so nothing repeats inside a week. The pick is deterministic per day, so reloading
@@ -120,6 +121,32 @@ low, and the card says so.
 Estimates are deliberately rough: no barcodes, no food database. The point is noticing
 patterns, not precision.
 
+## My usual shop
+
+Every recipe is tagged with what you'd actually put in a basket for it — the core
+components, not salt and oil. Tick what you normally buy in **Settings → My usual shop**
+and the daily rotation leans towards ideas you can make tonight. Meal cards say either
+*all from your usual shop* or *needs asparagus*, and the Week tab lists everything the
+coming seven days need that isn't on your list.
+
+Leave it blank and nothing changes — no ticks means no opinion.
+
+**What you can cook outranks variety.** Narrowing to the best-covered ideas happens
+first, and the no-repeat rule is applied within that. The other order looked tidier but
+broke the feature: with a short list there may be only one covered idea per slot, and
+excluding it as "recent" sent the rotation straight back to meals needing a shop. The
+consequence is honest — a short list means the same meals come round often — so the
+Settings card tells you how many of the 75 ideas your list currently covers.
+
+## Petting
+
+Tap or stroke the pet. It squashes like a stress ball, grins, gives off hearts, and
+chirps a note that climbs as you keep going; keep at it and it says something daft.
+
+It is worth **no points and no progress**. Everything else in the app is tied to a
+schedule you could fall behind on, and this deliberately isn't — it's affection with
+nothing attached.
+
 ## Points
 
 - **+10** per meal logged
@@ -141,7 +168,7 @@ before you installed the app aren't counted against you in the weekly view.
 index.html               shell + views
 styles.css               pastel theme, light and dark
 app.js                   schedule, rotation, points, canvas pet, notifications
-recipes.js               the recipe database, each with a rough `kcal` per serving
+recipes.js               75 recipes with `kcal` and shopping `items`, plus the vocabulary
 sw.js                    offline cache + notification clicks
 manifest.webmanifest     PWA metadata
 icons/                   generated pixel-pet PNGs

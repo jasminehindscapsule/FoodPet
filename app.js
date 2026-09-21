@@ -34,7 +34,7 @@ const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v6 — background reminders';
+const APP_VERSION = 'v7 — your shop, more recipes, petting';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -82,6 +82,7 @@ const blank = () => ({
   times: {},          // slotId -> 'HH:MM' override from Settings
   showFuel: true,     // calorie ranges and the portion prompt can be switched off
   pushOn: false,      // background reminders via the worker in server/
+  pantry: [],         // the things you usually buy, from FOODPET_INGREDIENTS
   points: 0,
   streak: 0,
   lastStreakDay: null,
@@ -135,12 +136,80 @@ function seededIndex(str, len){
   for (let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return Math.abs(h) % len;
 }
-function pickRecipe(slotId, dateKey, salt = ''){
+// What this idea needs that isn't on your usual list. An empty shop means no
+// opinion at all — nothing is "missing" until you've told FoodPet what you buy.
+function missingFor(recipe){
+  if (!S.pantry || !S.pantry.length) return [];
+  const have = new Set(S.pantry);
+  return (recipe.items || []).filter(i => !have.has(i));
+}
+
+// Pure so the week ahead can be projected without touching stored state.
+//
+// What you can actually cook comes first, variety second. Applying the
+// no-repeat rule first looked tidier but broke the feature: with a short
+// shopping list there may be only one covered idea per slot, and excluding it
+// as "recent" pushed the rotation straight back to meals needing a shop.
+// So: narrow to the best-covered ideas, then pick the least recently used.
+function chooseRecipe(slotId, dateKey, recentIds, salt = ''){
   const all = RECIPES[slotId];
-  const recent = (S.recent[slotId] || []).slice(0, NO_REPEAT_DAYS);
-  let pool = all.filter(r => !recent.includes(r.id));
-  if (!pool.length) pool = all;                       // tiny pools: allow a repeat
+
+  let pool = all;
+  if (S.pantry && S.pantry.length){
+    const fewest = Math.min(...all.map(r => missingFor(r).length));
+    pool = all.filter(r => missingFor(r).length === fewest);
+  }
+
+  const fresh = pool.filter(r => !recentIds.includes(r.id));
+  if (fresh.length){
+    pool = fresh;
+  } else {
+    // Everything covered has been seen lately — take whatever was longest ago.
+    const oldest = Math.max(...pool.map(r => recentIds.indexOf(r.id)));
+    pool = pool.filter(r => recentIds.indexOf(r.id) === oldest);
+  }
   return pool[seededIndex(dateKey + slotId + salt, pool.length)];
+}
+
+function pickRecipe(slotId, dateKey, salt = ''){
+  return chooseRecipe(slotId, dateKey, (S.recent[slotId] || []).slice(0, NO_REPEAT_DAYS), salt);
+}
+
+// The coming week, simulated the way ensureDay would actually pick it. Today's
+// picks are already fixed, so they're used as-is.
+function projectWeek(days = 7){
+  const recent = {};
+  for (const k of Object.keys(S.recent)) recent[k] = (S.recent[k] || []).slice();
+  const out = [];
+  const base = new Date();
+  for (let i = 0; i < days; i++){
+    const d = new Date(base); d.setDate(d.getDate() + i);
+    const key = dayKey(d);
+    const picks = {};
+    for (const meal of MEALS){
+      const fixed = (S.picks[key] || {})[meal.id];
+      let r;
+      if (fixed){
+        r = RECIPES[meal.id].find(x => x.id === fixed) || RECIPES[meal.id][0];
+      } else {
+        r = chooseRecipe(meal.id, key, (recent[meal.id] || []).slice(0, NO_REPEAT_DAYS));
+        recent[meal.id] = [r.id, ...(recent[meal.id] || [])].slice(0, 14);
+      }
+      picks[meal.id] = r;
+    }
+    out.push({ key, picks });
+  }
+  return out;
+}
+
+// Everything the next week needs that isn't on your list, commonest first.
+function shoppingGaps(days = 7){
+  const counts = new Map();
+  for (const day of projectWeek(days))
+    for (const meal of MEALS)
+      for (const item of missingFor(day.picks[meal.id]))
+        counts.set(item, (counts.get(item) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 function ensureDay(){
   const key = today();
@@ -449,6 +518,7 @@ const pet = (() => {
   const OX = 1;          // a column of breathing room either side, so the pet
   const OB = 2;          // never touches the frame, and rows below for bob + shadow
   let mood = 'ok', baseMood = 'ok', eatUntil = 0, tempUntil = 0, t0 = performance.now();
+  let pokeAt = 0, hearts = [], strokes = 0, lastStroke = 0;
 
   cv.width  = (COLS + OX*2) * PX;
   cv.height = (ROWS + OY + OB) * PX;
@@ -488,6 +558,18 @@ const pet = (() => {
 
     cx.clearRect(0,0,cv.width,cv.height);
 
+    // A poke squashes the pet briefly, like a stress ball.
+    const sinceP = now - pokeAt;
+    const poking = sinceP >= 0 && sinceP < 420;
+    if (poking){
+      const k = Math.sin((sinceP / 420) * Math.PI);
+      const sx = 1 + 0.10 * k, sy = 1 - 0.12 * k;
+      cx.save();
+      cx.translate(cv.width/2, PX*(ROWS+OY));
+      cx.scale(sx, sy);
+      cx.translate(-cv.width/2, -PX*(ROWS+OY));
+    }
+
     // shadow
     cx.fillStyle = 'rgba(120,100,150,.12)';
     cx.fillRect(PX*(3+OX), PX*(ROWS-1+OY) + PX, PX*10, PX*0.6);
@@ -501,6 +583,8 @@ const pet = (() => {
         cx.fillStyle = c;
         cx.fillRect((x+OX)*PX, (y+OY)*PX + bob, PX, PX);
       }
+
+    if (poking) cx.restore();
 
     // hat sits on the head, riding the same bob
     const hat = HATS.find(h => h.id === S.wearing.hat);
@@ -525,6 +609,17 @@ const pet = (() => {
       cx.fillText('\u{1F957}', cv.width/2, PX*(10+OY) + bob - (1-k)*30 + 28);
       cx.globalAlpha = 1;
     }
+    // little hearts drifting up from where you touched
+    hearts = hearts.filter(h => now - h.born < 1100);
+    for (const h of hearts){
+      const k = (now - h.born) / 1100;
+      cx.globalAlpha = Math.max(0, 1 - k);
+      cx.font = `${14 + h.size}px serif`;
+      cx.textAlign = 'center';
+      cx.fillText('💛', h.x + Math.sin(k * 6 + h.seed) * 10, h.y - k * 70);
+      cx.globalAlpha = 1;
+    }
+
     requestAnimationFrame(draw);
   }
   requestAnimationFrame(draw);
@@ -532,6 +627,16 @@ const pet = (() => {
   function apply(m){ if (m !== mood){ mood = m; t0 = performance.now(); } }
 
   return {
+    // Touch is pure affection — no points, nothing to farm, nothing to miss.
+    touch(x, y){
+      const now = performance.now();
+      pokeAt = now;
+      hearts.push({ x, y, born: now, size: Math.random()*8, seed: Math.random()*6 });
+      if (hearts.length > 12) hearts.shift();
+      strokes = (now - lastStroke < 1400) ? strokes + 1 : 1;
+      lastStroke = now;
+      return strokes;
+    },
     setMood(m){ baseMood = m; if (performance.now() >= tempUntil) apply(m); },
     // A brief reaction to one meal, which fades back to how the day is going.
     tempMood(m, ms){
@@ -876,6 +981,15 @@ function fuelLine(meal, state){
   return `<p class="meal-fuel">Usual range ${target.min}–${target.max} kcal</p>`;
 }
 
+// Never phrased as a failure: it's a note about the basket, not about you.
+function shopLine(recipe){
+  if (!S.pantry || !S.pantry.length) return '';
+  const missing = missingFor(recipe);
+  return missing.length
+    ? `<p class="meal-shop">needs ${missing.join(', ')}</p>`
+    : `<p class="meal-shop have">✓ all from your usual shop</p>`;
+}
+
 function renderMeals(){
   const wrap = document.getElementById('meal-list');
   wrap.innerHTML = '';
@@ -893,6 +1007,7 @@ function renderMeals(){
       </div>
       <div class="meal-title">${meal.name}</div>
       ${fuelLine(meal, st)}
+      ${shopLine(r)}
       <p class="meal-recipe">${r.name}</p>
       <p class="meal-prep">${r.prep}</p>
       <p class="meal-why">${r.why}</p>`;
@@ -997,6 +1112,28 @@ function renderWeek(){
   document.getElementById('wk-perfect').textContent = S.perfectDays.filter(k => days.includes(k)).length;
   document.getElementById('app-version').textContent = 'FoodPet ' + APP_VERSION;
   renderFuel(days);
+  renderShoppingList();
+}
+
+function renderShoppingList(){
+  const card = document.getElementById('shop-card');
+  const body = document.getElementById('shop-body');
+  if (!S.pantry || !S.pantry.length){ card.hidden = true; return; }
+  card.hidden = false;
+
+  const gaps = shoppingGaps(7);
+  if (!gaps.length){
+    body.innerHTML = `<p class="muted small">Nothing to add — the whole week comes out of
+      what you already buy.</p>`;
+    return;
+  }
+  body.innerHTML = `
+    <p class="muted small">Everything the next seven days need that isn't on your usual
+      list. Swapping an idea changes this.</p>
+    <div class="chips">
+      ${gaps.map(([item, n]) =>
+        `<span class="chip-need">${item}${n > 1 ? `<em>&times;${n}</em>` : ''}</span>`).join('')}
+    </div>`;
 }
 
 function renderFuel(days){
@@ -1108,8 +1245,68 @@ function renderSettings(){
     times.appendChild(row);
   }
 
+  renderShopPicker();
+
   document.getElementById('set-about').textContent =
     `FoodPet ${APP_VERSION} · everything stored on this device`;
+}
+
+function renderShopPicker(){
+  const box = document.getElementById('set-shop');
+  const vocab = window.FOODPET_INGREDIENTS || {};
+  const have = new Set(S.pantry || []);
+  box.innerHTML = '';
+  for (const [group, items] of Object.entries(vocab)){
+    const h = document.createElement('div');
+    h.className = 'shop-group';
+    h.textContent = group;
+    box.appendChild(h);
+    const wrap = document.createElement('div');
+    wrap.className = 'chips';
+    for (const item of items){
+      const chip = document.createElement('button');
+      chip.className = 'chip-toggle' + (have.has(item) ? ' on' : '');
+      chip.textContent = item;
+      chip.setAttribute('aria-pressed', have.has(item) ? 'true' : 'false');
+      chip.onclick = () => togglePantry(item);
+      wrap.appendChild(chip);
+    }
+    box.appendChild(wrap);
+  }
+  const total = Object.values(vocab).flat().length;
+  document.getElementById('set-shop-count').textContent =
+    have.size ? `${have.size} of ${total} ticked` : 'nothing ticked yet';
+
+  // Honest about the trade-off: a short list means the same meals come round often.
+  const note = document.getElementById('set-shop-note');
+  if (!have.size){
+    note.textContent = '';
+  } else {
+    const all = Object.values(RECIPES).flat();
+    const covered = all.filter(r => missingFor(r).length === 0).length;
+    note.textContent = covered < 12
+      ? `${covered} of ${all.length} ideas need nothing extra — tick a few more for variety.`
+      : `${covered} of ${all.length} ideas need nothing extra.`;
+  }
+}
+
+function togglePantry(item){
+  const have = new Set(S.pantry || []);
+  have.has(item) ? have.delete(item) : have.add(item);
+  S.pantry = [...have];
+  // Re-pick today's unlogged meals so the change is visible straight away
+  // rather than only from tomorrow.
+  const key = today();
+  const log = S.history[key] || {};
+  if (S.picks[key]){
+    for (const meal of MEALS){
+      if (log[meal.id]) continue;
+      const r = chooseRecipe(meal.id, key, (S.recent[meal.id] || []).slice(1, NO_REPEAT_DAYS));
+      S.picks[key][meal.id] = r.id;
+    }
+  }
+  save();
+  renderAll();
 }
 
 function setSwitch(id, on){
@@ -1264,6 +1461,67 @@ document.getElementById('btn-profile').onclick = () => openProfileSheet(false);
 document.getElementById('sheet-backdrop').onclick = closeSheet;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 document.addEventListener('click', unlockAudio, { once:true });
+
+/* Petting. Tap or stroke the pet and it squashes, blinks happily and gives off
+   hearts. Deliberately unrewarded: affection you can't fall behind on. */
+(() => {
+  const cv = document.getElementById('pet-canvas');
+  let down = false, lastTouch = 0;
+
+  function at(e){
+    const r = cv.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: (p.clientX - r.left) * (cv.width / r.width),
+             y: (p.clientY - r.top)  * (cv.height / r.height) };
+  }
+
+  function stroke(e){
+    const now = performance.now();
+    if (now - lastTouch < 90) return;     // one reaction per gesture step
+    lastTouch = now;
+    const { x, y } = at(e);
+    const count = pet.touch(x, y);
+    pet.tempMood('happy', 2600);
+    if (count === 1 || count % 4 === 0) chirp(count);
+    if (count === 6) showNote({ icon:'💛', text: petLine() });
+  }
+
+  const onDown = e => { down = true; unlockAudio(); stroke(e); };
+  const onMove = e => { if (down) { e.preventDefault(); stroke(e); } };
+  const onUp = () => { down = false; };
+
+  cv.addEventListener('mousedown', onDown);
+  cv.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  cv.addEventListener('touchstart', onDown, { passive:true });
+  cv.addEventListener('touchmove', onMove, { passive:false });
+  window.addEventListener('touchend', onUp);
+})();
+
+const PET_LINES = [
+  'That is the spot.',
+  'Happy little creature.',
+  'Thoroughly pleased with you.',
+  'Wriggling with joy.',
+];
+function petLine(){ return PET_LINES[Math.floor(Math.random() * PET_LINES.length)]; }
+
+// A soft rising blip, climbing a little with each stroke.
+function chirp(count){
+  if (!S.soundOn) return;
+  unlockAudio();
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.value = 660 + Math.min(count, 8) * 40;
+  const t = audioCtx.currentTime;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.10, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t); o.stop(t + 0.18);
+}
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   renderAll(); tick(); catchUpOnOpen();
