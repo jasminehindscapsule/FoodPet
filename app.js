@@ -34,7 +34,7 @@ const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v7 — your shop, more recipes, petting';
+const APP_VERSION = 'v7.1 — calmer petting';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -518,7 +518,7 @@ const pet = (() => {
   const OX = 1;          // a column of breathing room either side, so the pet
   const OB = 2;          // never touches the frame, and rows below for bob + shadow
   let mood = 'ok', baseMood = 'ok', eatUntil = 0, tempUntil = 0, t0 = performance.now();
-  let pokeAt = 0, hearts = [], strokes = 0, lastStroke = 0;
+  let pokeAt = 0, hearts = [], strokes = 0, lastStroke = 0, smileUntil = 0;
 
   cv.width  = (COLS + OX*2) * PX;
   cv.height = (ROWS + OY + OB) * PX;
@@ -529,6 +529,7 @@ const pet = (() => {
     const r = SPRITE.slice();
     const eating = performance.now() < eatUntil;
     const chomp = eating && Math.floor(performance.now()/160) % 2 === 0;
+    const smiling = performance.now() < smileUntil;
 
     // --- eyes --- (the base sprite's are already wide open)
     if (mood === 'tired' || mood === 'sleepy'){          // soft closed lids
@@ -560,10 +561,10 @@ const pet = (() => {
 
     // A poke squashes the pet briefly, like a stress ball.
     const sinceP = now - pokeAt;
-    const poking = sinceP >= 0 && sinceP < 420;
+    const poking = sinceP >= 0 && sinceP < 560;
     if (poking){
-      const k = Math.sin((sinceP / 420) * Math.PI);
-      const sx = 1 + 0.10 * k, sy = 1 - 0.12 * k;
+      const k = Math.sin((sinceP / 560) * Math.PI);
+      const sx = 1 + 0.07 * k, sy = 1 - 0.08 * k;
       cx.save();
       cx.translate(cv.width/2, PX*(ROWS+OY));
       cx.scale(sx, sy);
@@ -631,6 +632,9 @@ const pet = (() => {
     touch(x, y){
       const now = performance.now();
       pokeAt = now;
+      // Smile without switching mood: the happy mood bobs much faster, which
+      // made petting feel frantic rather than fond.
+      smileUntil = now + 2600;
       hearts.push({ x, y, born: now, size: Math.random()*8, seed: Math.random()*6 });
       if (hearts.length > 12) hearts.shift();
       strokes = (now - lastStroke < 1400) ? strokes + 1 : 1;
@@ -1477,11 +1481,10 @@ document.addEventListener('click', unlockAudio, { once:true });
 
   function stroke(e){
     const now = performance.now();
-    if (now - lastTouch < 90) return;     // one reaction per gesture step
+    if (now - lastTouch < 150) return;    // one reaction per gesture step
     lastTouch = now;
     const { x, y } = at(e);
     const count = pet.touch(x, y);
-    pet.tempMood('happy', 2600);
     if (count === 1 || count % 4 === 0) chirp(count);
     if (count === 6) showNote({ icon:'💛', text: petLine() });
   }

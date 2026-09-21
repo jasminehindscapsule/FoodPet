@@ -143,6 +143,10 @@ Settings card tells you how many of the 75 ideas your list currently covers.
 Tap or stroke the pet. It squashes like a stress ball, grins, gives off hearts, and
 chirps a note that climbs as you keep going; keep at it and it says something daft.
 
+Petting changes the *face*, never the tempo. The first version switched the pet into its
+happy mood, which bobs at nearly twice the resting speed — the result read as frantic
+rather than fond.
+
 It is worth **no points and no progress**. Everything else in the app is tied to a
 schedule you could fall behind on, and this deliberately isn't — it's affection with
 nothing attached.
