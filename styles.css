@@ -68,7 +68,8 @@ main{max-width:520px;margin:0 auto}
   padding:10px;display:flex;justify-content:center;
 }
 @media (prefers-color-scheme: dark){ .pet-screen{background:linear-gradient(180deg,#36405c,#2e3550)} }
-#pet-canvas{width:100%;max-width:224px;height:auto;image-rendering:pixelated}
+/* size is set in JS to a whole number of device pixels per sprite pixel */
+#pet-canvas{image-rendering:pixelated;display:block}
 .pet-mood{margin:12px 0 6px;font-weight:700}
 .xp-wrap{display:flex;align-items:center;gap:8px}
 .xp-bar{flex:1;height:10px;border-radius:99px;background:var(--line);overflow:hidden}

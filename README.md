@@ -138,6 +138,15 @@ excluding it as "recent" sent the rotation straight back to meals needing a shop
 consequence is honest — a short list means the same meals come round often — so the
 Settings card tells you how many of the 75 ideas your list currently covers.
 
+## Why the canvas sizes itself
+
+Each sprite pixel must occupy a whole number of *device* pixels. When the canvas was a
+fixed 288px shown at 224 CSS px, the browser resampled it, some sprite rows landed a
+pixel taller than others, and the rounding pattern crawled as the pet bobbed — visible
+as shimmering edges. The canvas now picks the largest whole device-pixel size that fits
+its container and sets its CSS size to match 1:1, so there is nothing to resample. It
+recalculates on resize and rotation.
+
 ## Petting
 
 Tap or stroke the pet. It squashes like a stress ball, grins, gives off hearts, and

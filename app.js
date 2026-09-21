@@ -34,7 +34,7 @@ const DUE_WINDOW_MIN = 120;    // how long a meal counts as "now" after its time
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v7.1 — calmer petting';
+const APP_VERSION = 'v7.2 — crisper pet';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -513,15 +513,35 @@ const HAT_ROWS = {
 const pet = (() => {
   const cv = document.getElementById('pet-canvas');
   const cx = cv.getContext('2d');
-  const PX = 16;
   const OY = 4;          // rows of headroom above the pet, so tall hats fit
   const OX = 1;          // a column of breathing room either side, so the pet
   const OB = 2;          // never touches the frame, and rows below for bob + shadow
+  let PX = 16;           // device pixels per sprite pixel — always a whole number
   let mood = 'ok', baseMood = 'ok', eatUntil = 0, tempUntil = 0, t0 = performance.now();
   let pokeAt = 0, hearts = [], strokes = 0, lastStroke = 0, smileUntil = 0;
 
-  cv.width  = (COLS + OX*2) * PX;
-  cv.height = (ROWS + OY + OB) * PX;
+  /* Every sprite pixel must occupy a whole number of device pixels, or the
+     browser resamples the canvas and the rounding pattern crawls as the pet
+     bobs — visible as shimmering pixel edges. So: pick the largest whole
+     device-pixel size that fits, size the backing store to exactly that, and
+     set the CSS size to match it 1:1. No scaling, nothing to resample. */
+  const gridCols = COLS + OX*2, gridRows = ROWS + OY + OB;
+  function layout(){
+    const dpr = Math.max(1, Math.min(4, Math.round(window.devicePixelRatio || 1)));
+    const parent = cv.parentElement;
+    const avail = Math.min(236, Math.max(140, (parent ? parent.clientWidth : 236) - 24));
+    PX = Math.max(4, Math.floor((avail * dpr) / gridCols));
+    cv.width  = PX * gridCols;
+    cv.height = PX * gridRows;
+    cv.style.width  = (cv.width  / dpr) + 'px';
+    cv.style.height = (cv.height / dpr) + 'px';
+  }
+  layout();
+  let relayout;
+  window.addEventListener('resize', () => {
+    clearTimeout(relayout);
+    relayout = setTimeout(layout, 150);
+  });
 
   function palette(){ return PALETTES.find(p => p.id === S.wearing.palette) || PALETTES[0]; }
 
@@ -604,7 +624,7 @@ const pet = (() => {
     // a little snack floating into the mouth
     if (eating){
       const k = 1 - (eatUntil - now) / 1500;
-      cx.font = '38px serif';
+      cx.font = `${Math.round(PX*2.4)}px serif`;
       cx.textAlign = 'center';
       cx.globalAlpha = Math.max(0, 1 - k);
       cx.fillText('\u{1F957}', cv.width/2, PX*(10+OY) + bob - (1-k)*30 + 28);
@@ -615,9 +635,9 @@ const pet = (() => {
     for (const h of hearts){
       const k = (now - h.born) / 1100;
       cx.globalAlpha = Math.max(0, 1 - k);
-      cx.font = `${14 + h.size}px serif`;
+      cx.font = `${Math.round(PX*0.9 + h.size)}px serif`;
       cx.textAlign = 'center';
-      cx.fillText('💛', h.x + Math.sin(k * 6 + h.seed) * 10, h.y - k * 70);
+      cx.fillText('💛', h.x + Math.sin(k * 6 + h.seed) * PX*0.7, h.y - k * PX*4.5);
       cx.globalAlpha = 1;
     }
 
