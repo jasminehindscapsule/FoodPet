@@ -36,7 +36,7 @@ const PUSH_GRACE_MIN = 12;     // with background reminders on, wait this long f
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v7.4 — hats that fit';
+const APP_VERSION = 'v7.5 — hats that fit';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -539,12 +539,10 @@ const HAT_ART = {
     '....aaaaaaaa....',
     '...bbbbbbbbbb...',   // base band, flush with the dome
   ]},
-  // Petals with gaps between them, so the pet shows through and it reads as a
-  // flower rather than the solid pink square it was.
   flower: { top: 2, rows: [
-    '...a.a..........',
-    '...aba..........',   // tucked against the side of the dome,
-    '...a.a..........',   // where the head is wide enough to hold it
+    '...aaa..........',   // tucked against the side of the dome,
+    '...aba..........',   // where the head is wide enough to hold it
+    '...aaa..........',
   ]},
 };
 
