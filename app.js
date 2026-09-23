@@ -36,7 +36,7 @@ const PUSH_GRACE_MIN = 12;     // with background reminders on, wait this long f
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v7.6 — hat tweaks';
+const APP_VERSION = 'v7.7 — hat tweaks';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -527,10 +527,10 @@ const HAT_ART = {
     '....baaaaaab....',   // gathers onto the crown
     '...bbbbbbbbbb...',   // band, flush with the dome
   ]},
-  crown:  { top: 0, rows: [
+  crown:  { top: -1, rows: [
     '.....a.aa.a.....',   // points
-    '.....aaaaaa.....',   // sits exactly on the crown row
-    '.....bbbbbb.....',   // band, flush with the crown rather than jutting past it
+    '.....aaaaaa.....',
+    '.....bbbbbb.....',   // band rests on the crown row rather than sinking into it
   ]},
   party:  { top: -2, rows: [
     '.......aa.......',
