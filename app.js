@@ -36,7 +36,7 @@ const PUSH_GRACE_MIN = 12;     // with background reminders on, wait this long f
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v7.5 — hats that fit';
+const APP_VERSION = 'v7.6 — hat tweaks';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -516,6 +516,7 @@ const HAT_ART = {
     '.....aaaaaa.....',   // row 0 — above the dome
     '....aaaaaaaa....',   // row 1 — over the crown, a little overhang, as a beanie does
     '...bbbbbbbbbb...',   // row 2 — turned-up brim, exactly the dome width here
+    '..bbbbbbbbbbbb..',   // row 3 — second band, following the dome as it widens
   ]},
   // Outlined, because a white hat on the near-white pet screen read as a
   // floating grey band with nothing above it.
@@ -529,13 +530,12 @@ const HAT_ART = {
   crown:  { top: 0, rows: [
     '.....a.aa.a.....',   // points
     '.....aaaaaa.....',   // sits exactly on the crown row
-    '...bbbbbbbbbb...',   // band around the dome
+    '.....bbbbbb.....',   // band, flush with the crown rather than jutting past it
   ]},
-  party:  { top: -3, rows: [
-    '.......a........',   // a real point — the old one was too blunt to read as a cone
-    '......aaa.......',
-    '.....aabaa......',
-    '....aaaaaaaa....',
+  party:  { top: -2, rows: [
+    '.......aa.......',
+    '......aaaa......',
+    '.....aabbaa.....',
     '....aaaaaaaa....',
     '...bbbbbbbbbb...',   // base band, flush with the dome
   ]},
