@@ -36,7 +36,7 @@ const PUSH_GRACE_MIN = 12;     // with background reminders on, wait this long f
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v7.3 — one reminder per meal';
+const APP_VERSION = 'v7.4 — hats that fit';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -503,13 +503,49 @@ const SPRITE = [
   '.....DD..DD.....',
 ];
 const COLS = SPRITE[0].length, ROWS = SPRITE.length;
-const HAT_ROWS = {
-  none:   [],
-  beanie: ['....aaaaaaaa....','...abbbbbbbba...','..aaaaaaaaaaaa..'],
-  chef:   ['...aa.aaaa.aa...','..aaaaaaaaaaaa..','...abbbbbbba....'],
-  crown:  ['...a...a...a....','...aa.aaa.aa....','...aaaaaaaaa....','....bbbbbbb.....'],
-  party:  ['.......a........','......aaa.......','.....aabaa......','....aaaaaaa.....'],
-  flower: ['.....a.a.a......','....aabbbaa.....','.....a.a.a......'],
+/* Hats are anchored to the head, not floated above it.
+
+   The dome narrows fast — row 1 is only 6 pixels wide (cols 5-10), row 2 is 10
+   (3-12), row 3 is 12 (2-13) — so a 12-wide brim placed above the crown hangs
+   in mid-air, which is exactly how these used to look. Each hat now carries the
+   sprite row its art starts on, and its lowest band is drawn at the width the
+   head actually is there, so it sits on the head and covers the outline. */
+const HAT_ART = {
+  none:   null,
+  beanie: { top: 0, rows: [
+    '.....aaaaaa.....',   // row 0 — above the dome
+    '....aaaaaaaa....',   // row 1 — over the crown, a little overhang, as a beanie does
+    '...bbbbbbbbbb...',   // row 2 — turned-up brim, exactly the dome width here
+  ]},
+  // Outlined, because a white hat on the near-white pet screen read as a
+  // floating grey band with nothing above it.
+  chef:   { top: -2, rows: [
+    '....bbbbbbbb....',
+    '...baaaaaaaab...',   // the puff, edged so it reads against a pale background
+    '...baaaaaaaab...',
+    '....baaaaaab....',   // gathers onto the crown
+    '...bbbbbbbbbb...',   // band, flush with the dome
+  ]},
+  crown:  { top: 0, rows: [
+    '.....a.aa.a.....',   // points
+    '.....aaaaaa.....',   // sits exactly on the crown row
+    '...bbbbbbbbbb...',   // band around the dome
+  ]},
+  party:  { top: -3, rows: [
+    '.......a........',   // a real point — the old one was too blunt to read as a cone
+    '......aaa.......',
+    '.....aabaa......',
+    '....aaaaaaaa....',
+    '....aaaaaaaa....',
+    '...bbbbbbbbbb...',   // base band, flush with the dome
+  ]},
+  // Petals with gaps between them, so the pet shows through and it reads as a
+  // flower rather than the solid pink square it was.
+  flower: { top: 2, rows: [
+    '...a.a..........',
+    '...aba..........',   // tucked against the side of the dome,
+    '...a.a..........',   // where the head is wide enough to hold it
+  ]},
 };
 
 const pet = (() => {
@@ -607,21 +643,22 @@ const pet = (() => {
         cx.fillRect((x+OX)*PX, (y+OY)*PX + bob, PX, PX);
       }
 
-    if (poking) cx.restore();
-
-    // hat sits on the head, riding the same bob
+    // The hat is drawn inside the squash transform, so it stretches with the head
+    // while the pet is being petted. Drawn after the restore it sat rigid on a
+    // squashing head, which looked like it was hovering.
     const hat = HATS.find(h => h.id === S.wearing.hat);
-    const hr = HAT_ROWS[S.wearing.hat] || [];
-    if (hat && hr.length){
-      const top = OY + 1 - hr.length;
-      for (let y = 0; y < hr.length; y++)
-        for (let x = 0; x < hr[y].length; x++){
-          const ch = hr[y][x];
+    const art = HAT_ART[S.wearing.hat];
+    if (hat && art){
+      for (let y = 0; y < art.rows.length; y++)
+        for (let x = 0; x < art.rows[y].length; x++){
+          const ch = art.rows[y][x];
           if (ch === '.') continue;
           cx.fillStyle = ch === 'a' ? hat.a : hat.b;
-          cx.fillRect((x+OX)*PX, (top + y)*PX + bob, PX, PX);
+          cx.fillRect((x+OX)*PX, (OY + art.top + y)*PX + bob, PX, PX);
         }
     }
+
+    if (poking) cx.restore();
 
     // a little snack floating into the mouth
     if (eating){

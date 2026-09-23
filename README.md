@@ -147,6 +147,17 @@ as shimmering edges. The canvas now picks the largest whole device-pixel size th
 its container and sets its CSS size to match 1:1, so there is nothing to resample. It
 recalculates on resize and rotation.
 
+## Hats
+
+Each hat carries the sprite row its art starts on, rather than being floated a fixed
+distance above the head. The dome narrows fast — row 1 is six pixels wide, row 2 is ten,
+row 3 is twelve — so hats anchored above the crown hung in mid-air with brims wider than
+the head they were supposed to sit on. Every hat's lowest band is now drawn at the width
+the head actually is on that row, so it wraps the dome and covers its outline.
+
+Hats are drawn inside the squash transform, so they stretch with the head when the pet is
+petted instead of hovering rigidly over a squashing face.
+
 ## Petting
 
 Tap or stroke the pet. It squashes like a stress ball, grins, gives off hearts, and
