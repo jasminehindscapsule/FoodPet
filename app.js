@@ -36,7 +36,7 @@ const PUSH_GRACE_MIN = 12;     // with background reminders on, wait this long f
 const NOTIFY_WINDOW_MIN = 90;  // how long after a meal time a reminder may still fire.
                                // Phones suspend the page, so a tick can easily land
                                // 20+ minutes late; 15 minutes silently missed most of them.
-const APP_VERSION = 'v7.11 — hat tweaks';
+const APP_VERSION = 'v7.12 — name your pet';
 
 /* ---------------- fuel: targets and portions ---------------- */
 // How the day's energy is split across the six slots.
@@ -85,6 +85,7 @@ const blank = () => ({
   showFuel: true,     // calorie ranges and the portion prompt can be switched off
   pushOn: false,      // background reminders via the worker in server/
   pantry: [],         // the things you usually buy, from FOODPET_INGREDIENTS
+  petName: '',        // what you call your pet; empty until you choose one
   points: 0,
   streak: 0,
   lastStreakDay: null,
@@ -1005,7 +1006,48 @@ function hideNote(){
   document.getElementById('pet-note').hidden = true;
 }
 
+const MAX_NAME = 20;
+const cleanName = v => String(v || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
+
+function setPetName(v){
+  S.petName = cleanName(v);
+  save();
+  renderPet();
+  renderSettings();
+}
+
+// A small sheet for renaming straight from the Pet tab.
+function openNameSheet(){
+  openSheet(S.petName ? 'Rename your pet' : 'Name your pet', 'Up to 20 characters.', body => {
+    const input = document.createElement('input');
+    input.className = 'field';
+    input.type = 'text';
+    input.maxLength = MAX_NAME;
+    input.autocomplete = 'off';
+    input.placeholder = 'Name';
+    input.value = S.petName || '';
+    body.appendChild(input);
+    const go = document.createElement('button');
+    go.className = 'btn primary';
+    go.style.marginTop = '12px';
+    go.textContent = 'Save';
+    const commit = () => { setPetName(input.value); closeSheet(); };
+    go.onclick = commit;
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); });
+    body.appendChild(go);
+    const cancel = document.createElement('button');
+    cancel.className = 'linkbtn wide'; cancel.textContent = 'Cancel'; cancel.onclick = closeSheet;
+    body.appendChild(cancel);
+    setTimeout(() => input.focus(), 50);
+  });
+}
+
 function renderPet(){
+  // textContent, never innerHTML — the name is whatever was typed
+  const nameEl = document.getElementById('pet-name');
+  nameEl.textContent = S.petName || 'Tap to name your pet';
+  nameEl.classList.toggle('unnamed', !S.petName);
+
   const mood = moodNow();
   pet.setMood(mood);
   const lines = MOOD_LINES[mood];
@@ -1329,6 +1371,9 @@ function renderSettings(){
 
   renderShopPicker();
 
+  const nameField = document.getElementById('set-pet-name');
+  if (document.activeElement !== nameField) nameField.value = S.petName || '';
+
   document.getElementById('set-about').textContent =
     `FoodPet ${APP_VERSION} · everything stored on this device`;
 }
@@ -1535,6 +1580,8 @@ document.getElementById('set-test').onclick = async () => {
     ? 'Sent. If nothing appeared, check notifications for this app in your phone settings.'
     : 'Your browser accepted the permission but refused to show it. On iPhone this usually means the app needs to be opened from the home-screen icon rather than a browser tab.';
 };
+document.getElementById('pet-name').onclick = openNameSheet;
+document.getElementById('set-pet-name').addEventListener('change', e => setPetName(e.target.value));
 document.getElementById('set-export').onclick = copyBackup;
 document.getElementById('set-import').onclick = restoreBackup;
 document.getElementById('set-reset').onclick = resetEverything;

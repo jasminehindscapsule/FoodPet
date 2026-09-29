@@ -345,3 +345,14 @@ main{max-width:520px;margin:0 auto}
 .meal-shop.have{color:#2f5a49}
 @media (prefers-color-scheme: dark){ .meal-shop.have{color:var(--mint)} }
 #pet-canvas{cursor:pointer;touch-action:none}
+
+/* ---------- pet name ---------- */
+.pet-name{
+  display:block;margin:12px auto 0;background:none;border:none;cursor:pointer;
+  font:inherit;font-size:20px;font-weight:800;color:var(--ink);
+  padding:2px 10px;border-radius:12px;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.pet-name:hover,.pet-name:focus-visible{background:var(--bg)}
+.pet-name.unnamed{font-size:14px;font-weight:700;color:var(--ink-soft)}
+.pet-name + .pet-mood{margin-top:2px}
